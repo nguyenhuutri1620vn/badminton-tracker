@@ -58,6 +58,6 @@ Dashboard di chuyển, thống kê qua nhiều buổi, gửi kết quả cho kh�
 - Không thêm thư viện nặng nếu chưa cần cho MVP.
 
 ## Trạng thái hiện tại
-- Kế hoạch hoàn thành MVP: `docs/PLAN.md`. Quyết định Claude tự chọn: `docs/DECISIONS.md`.
-- Đã xong: score engine nhiều khả năng và bộ phát hiện đội hình phát cầu, test bằng mô phỏng.
-- Chưa có video quay thử; tham số CV và engine cần chỉnh bằng video thật (bước 9 của kế hoạch).
+- MVP đã xong 10 bước trong `docs/PLAN.md`; quyết định Claude tự chọn và giới hạn đã biết: `docs/DECISIONS.md`. Hướng dẫn sử dụng: `README.md`.
+- Đã kiểm tra bằng test (150) và giả lập trong Chrome. Chưa thử với camera iPhone và video thật có người.
+- Việc tiếp theo: host thử camera thật, quay 1–2 ván, chạy màn hình Phân tích video để đo độ chính xác và chỉnh tham số.

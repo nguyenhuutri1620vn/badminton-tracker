@@ -48,4 +48,27 @@ describe('FrameProcessor', () => {
       expect(engine.state.score).toEqual(simulator.score);
     },
   );
+
+  it('người chơi đứng chờ sau pha cuối không làm cộng thừa điểm (20 ván)', () => {
+    for (let seed = 1; seed <= 20; seed += 1) {
+      const simulator = new MatchSimulator({ random: seededRandom(seed * 31), handSignalRate: 0.3 });
+      const processor = new FrameProcessor(TEST_CALIBRATION);
+      const detector = new ServeFormationDetector();
+      const engine = new MatchEngine();
+      const feed = () => {
+        const truth = simulator.next(1000 / 15);
+        const obs = detector.push(processor.process(truth.t, posesFromPositions(truth.players)));
+        if (!obs) return;
+        engine.observeServe(obs);
+        // Như khi host không bấm popup: hết giờ thì không phải phát lại.
+        const pending = engine.state.pendingReplay;
+        if (pending) engine.decideReplay(pending.observationId, false);
+      };
+      while (!simulator.finished) feed();
+      for (let i = 0; i < 15 * 10; i += 1) feed();
+      const resolution = engine.finalRallyResolution();
+      if (resolution.kind === 'auto' || resolution.kind === 'none') engine.end();
+      expect({ seed, score: engine.state.score }).toEqual({ seed, score: simulator.score });
+    }
+  });
 });

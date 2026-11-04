@@ -153,6 +153,17 @@ describe('kết thúc ván', () => {
     expect(state.score).toEqual({ near: 21, far: 19 });
   });
 
+  it('đội hình giả sau pha cuối (người chơi đứng chờ): hiểu là ván đã kết thúc, không cộng thừa', () => {
+    // 20-12, near phát ô phải. Near thắng pha cuối (21-12) rồi mọi người đứng yên, camera thấy giống đội hình
+    // far phát ô phải. Giải thích "far thắng 2 pha" (20-14) không được rẻ hơn "ván đã kết thúc ở 21-12".
+    const state = computeMatchState([
+      { type: 'manualScore', id: 'm1', t: 0, score: { near: 20, far: 12 }, servingTeam: 'near' },
+      serve('far', 'right'),
+    ]);
+    expect(state.score).toEqual({ near: 21, far: 12 });
+    expect(state.finished).toBe(true);
+  });
+
   it('29-29: pha kế tiếp quyết định ván ở 30', () => {
     const state = computeMatchState([
       { type: 'manualScore', id: 'm1', t: 0, score: { near: 29, far: 29 }, servingTeam: 'near' },

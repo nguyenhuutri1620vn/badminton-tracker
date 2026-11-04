@@ -52,3 +52,15 @@ Quyết định do Claude tự chọn theo đề xuất khi làm theo `docs/PLAN
 | D38 | Model pose | Ưu tiên file `public/models/pose_landmarker_lite.task` (tải bằng `npm run model`), không có thì lấy từ CDN của Google; wasm chép vào `public/mediapipe` khi chạy `npm run dev`/`build` | Chạy được ở sân không có internet nếu tải model trước. |
 | D39 | Tần số CV | 12 khung/giây | Đủ cho vị trí người chơi, nhẹ cho Mac khi đồng thời ghi video. |
 | D40 | Giả lập | Người chơi di chuyển liên tục giữa các đội hình (không dịch chuyển tức thời) | Để test được cả tracker; phát hiện được lỗi đếm thừa khi người chơi đứng yên giữa pha. |
+| D41 | Cách duyệt video khi phân tích | Tua từng bước 1/12 giây (seek) rồi chạy pose trên khung đó | Không bỏ khung nào dù máy chậm; chậm hơn thời gian thực nhưng kết quả lặp lại được. |
+| D42 | Popup phát lại khi phân tích | Coi như hết giờ (+2) | Giống khi host không bấm gì trong trận thật. |
+| D43 | So với tỉ số thật | Host nhập tỉ số thật sau khi phân tích; app báo khớp/lệch; xuất JSON gồm từng lần phát (thời điểm, đội phát, ô, vị trí từng người, tỉ số sau) | Dữ liệu để tinh chỉnh tham số detector và engine. |
+| D44 | Calibrate cho video cũ | Nút "Calibrate từ khung này" lấy khung hình đang dừng của video sang màn hình Calibrate | Video quay trước khi calibrate vẫn phân tích được. |
+| D45 | Git | Host yêu cầu commit và push: nhánh `develop` đã push lên `origin` (repo trống nên `develop` là nhánh đầu tiên, chưa có `main`) | Theo yêu cầu host ngày 2026-11-04. |
+| D46 | Danh sách kiểm tra trước buổi | Tự kiểm tra: camera (có phải iPhone), calibrate (tỉ lệ khung hình), thư mục video, model trên máy, giữ màn hình sáng, số người; host tự đánh dấu: sạc iPhone, Không làm phiền, thấy đủ 4 góc, ánh sáng | Gom mọi thứ dễ quên vào một chỗ; mục cảnh báo không chặn. |
+| D47 | Đội hình giả sau ván | Engine luôn xét khả năng "ván đã kết thúc, đội hình vừa thấy là thừa" (phạt 0,5) | Người chơi đứng chờ sau ván không làm cộng thừa điểm, trừ khi họ đứng đúng y một đội hình phát cầu hợp lệ (xem giới hạn). |
+
+## Giới hạn đã biết
+
+- Sau pha cuối, nếu người chơi đứng yên đúng một đội hình phát cầu hợp lệ (đúng ô, đúng chéo, đúng vị trí theo luật) trước khi host bấm Kết thúc ván, app có thể hiểu là thêm một pha. Khắc phục: bấm Kết thúc ván ngay khi hết ván.
+- Camera bỏ lỡ từ 3 lần phát liên tiếp trở lên thì engine không giải thích được và có thể sai điểm.

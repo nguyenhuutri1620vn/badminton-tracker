@@ -1,5 +1,6 @@
 import type { Screen } from '../app/appModel';
 import { useAppState, useModel } from './context';
+import { AnalyzeScreen } from './screens/AnalyzeScreen';
 import { CalibrateScreen } from './screens/CalibrateScreen';
 import { DevicesScreen } from './screens/DevicesScreen';
 import { HistoryScreen } from './screens/HistoryScreen';
@@ -14,6 +15,7 @@ const NAV: { screen: Screen; label: string }[] = [
   { screen: 'history', label: 'Lịch sử' },
   { screen: 'calibrate', label: 'Calibrate' },
   { screen: 'checklist', label: 'Thiết bị' },
+  { screen: 'analyze', label: 'Phân tích video' },
 ];
 
 export function App() {
@@ -30,7 +32,7 @@ export function App() {
           <button
             key={screen}
             class={`nav-item ${state.screen === screen ? 'active' : ''}`}
-            disabled={!state.session && screen !== 'session' && screen !== 'calibrate' && screen !== 'checklist'}
+            disabled={!state.session && screen !== 'session' && screen !== 'calibrate' && screen !== 'checklist' && screen !== 'analyze'}
             onClick={() => model.navigate(screen)}
           >
             {label}
@@ -51,6 +53,7 @@ export function App() {
         {state.screen === 'history' && <HistoryScreen />}
         {state.screen === 'calibrate' && <CalibrateScreen />}
         {state.screen === 'checklist' && <DevicesScreen />}
+        {state.screen === 'analyze' && <AnalyzeScreen />}
       </main>
     </div>
   );

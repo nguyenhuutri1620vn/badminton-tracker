@@ -9,7 +9,7 @@ const CDN_MODEL =
 /** Số người tối đa nhận diện: 4 người chơi cộng người chờ đứng gần sân. */
 const NUM_POSES = 6;
 
-async function hasLocalModel(): Promise<boolean> {
+export async function hasLocalModel(): Promise<boolean> {
   try {
     const response = await fetch(LOCAL_MODEL, { method: 'HEAD' });
     // Dev server trả về index.html cho file không tồn tại, nên phải kiểm tra loại nội dung.

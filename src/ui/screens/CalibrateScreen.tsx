@@ -36,6 +36,12 @@ export function CalibrateScreen() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
+  // Khung hình gửi từ màn hình Phân tích video.
+  useEffect(() => {
+    const image = model.consumeCalibrationImage();
+    if (image) startEditing(image);
+  }, [model]);
+
   const liveStream = cam.status === 'on' ? camera.current : null;
   useEffect(() => {
     if (videoRef.current) videoRef.current.srcObject = liveStream;

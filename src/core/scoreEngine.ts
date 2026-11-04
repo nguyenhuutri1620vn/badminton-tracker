@@ -195,6 +195,8 @@ function expand(
       const skipped = cloneBranch(branch);
       skipped.skippedLow.push(obs.id);
       children.push(skipped);
+    } else {
+      children.push(...gameEndingChildren(branch, obs));
     }
 
     for (const team of teams) {
@@ -205,16 +207,11 @@ function expand(
         const child = cloneBranch(branch);
         const inferred = explanation.missedServes > 0;
         const applied = applyWinners(child, explanation.winners, obs.id, obs.t, inferred);
-        // Ván kết thúc giữa chừng: phần còn lại không thể xảy ra, lần phát này là thừa.
-        const cutShort = applied < explanation.winners.length;
+        // Ván kết thúc trước khi hết chuỗi: đã có gameEndingChildren lo trường hợp này.
+        if (applied < explanation.winners.length) continue;
         if (explanation.winners.length === 0 && !explanation.replay) child.servingTeam = team;
         // Người phát phải đứng đúng ô theo chẵn lẻ điểm của đội mình.
-        if (!cutShort && courtForScore(child.score[team]) !== obs.court) continue;
-        if (cutShort) {
-          if (low) continue;
-          child.penalty += AFTER_FINISH_PENALTY;
-          child.notes.push({ kind: 'afterFinish', sourceId: obs.id });
-        }
+        if (courtForScore(child.score[team]) !== obs.court) continue;
 
         const mismatch = syncCourtPlayers(child, obs);
         if (low) {
@@ -232,6 +229,30 @@ function expand(
             child.notes.push({ kind: 'courtPlayersMismatch', sourceId: obs.id });
           }
         }
+        children.push(child);
+      }
+    }
+  }
+  return children;
+}
+
+/**
+ * Khả năng "ván đã kết thúc trước lần phát này": các pha cuối cùng đưa một đội tới điểm kết thúc ván,
+ * còn đội hình vừa thấy là thừa (người chơi đứng chờ sau ván). Không cần khớp ô hay vị trí của lần phát.
+ */
+function gameEndingChildren(branch: Branch, obs: ServeObservation): Branch[] {
+  const missedBefore = branch.servingTeam === null ? 1 : 0;
+  const children: Branch[] = [];
+  for (let length = 1; length <= MAX_RALLIES_BETWEEN_SERVES; length += 1) {
+    for (const last of TEAMS) {
+      for (const winners of sequencesEndingWith(last, length)) {
+        const missedServes = length - 1 + missedBefore;
+        const child = cloneBranch(branch);
+        const applied = applyWinners(child, winners, obs.id, obs.t, missedServes > 0);
+        // Chỉ nhận chuỗi mà pha cuối của chuỗi đúng là pha kết thúc ván.
+        if (applied < winners.length || !isGameOver(child.score)) continue;
+        child.penalty += missedServes + AFTER_FINISH_PENALTY;
+        child.notes.push({ kind: 'afterFinish', sourceId: obs.id });
         children.push(child);
       }
     }

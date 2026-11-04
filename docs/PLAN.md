@@ -84,11 +84,19 @@ Mã nguồn:
   - Xong khi: test tracker bằng dữ liệu giả; chạy được với webcam.
   - Đã kiểm tra: test trích pose, tracker (giữ màu, người bị che, người ngoài sân, đổi màu), và chạy trọn 3 ván từ pose giả lập (có 2 người đứng ngoài sân) ra đúng tỉ số; MediaPipe tải và chạy trong Chrome. **Chưa thử với người thật** (khung trình duyệt của Claude chặn camera).
 
-- [ ] **9. Phân tích video có sẵn (để tinh chỉnh bằng video thật)**
+- [x] **9. Phân tích video có sẵn (để tinh chỉnh bằng video thật)**
   - Màn hình mở file video đã quay, chạy pipeline, xuất dòng thời gian quan sát và tỉ số, so với tỉ số host nhập tay.
   - Xong khi: chạy được trên một video bất kỳ, xuất JSON quan sát.
+  - Đã kiểm tra: lõi phân tích với pose giả lập ra đúng tỉ số; trong Chrome mở video, phân tích hết, "Calibrate từ khung này" chuyển sang màn hình Calibrate với khung hình của video. **Chưa có video thật có người để đo.**
 
-- [ ] **10. Hoàn thiện**
+- [x] **10. Hoàn thiện**
   - Danh sách kiểm tra trước buổi (camera, pin, ánh sáng, calibrate, thư mục lưu).
   - `README.md` hướng dẫn cài đặt và sử dụng bằng tiếng Việt.
   - `npm run build` sạch, toàn bộ test pass, kiểm tra luồng trong trình duyệt.
+  - Đã kiểm tra: danh sách kiểm tra ở màn hình Thiết bị, README, 150 test, build; ván giả lập trong Chrome.
+
+## Việc tiếp theo (cần host)
+
+1. Thử camera iPhone thật trong Chrome (màn hình Thiết bị), calibrate sân thật.
+2. Quay 1–2 ván, chạy màn hình Phân tích video, nhập tỉ số thật, xuất JSON gửi lại để tinh chỉnh.
+3. Theo dõi: tỉ lệ khung hình thấy đủ 4 người, số lần phát bị bỏ lỡ, số popup phát lại.

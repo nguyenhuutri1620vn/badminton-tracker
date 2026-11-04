@@ -15,7 +15,7 @@ import {
   renamePlayer,
 } from './session';
 
-export type Screen = 'session' | 'setup' | 'live' | 'history' | 'calibrate' | 'checklist';
+export type Screen = 'session' | 'setup' | 'live' | 'history' | 'calibrate' | 'checklist' | 'analyze';
 
 export type SourceKind = 'none' | 'simulator' | 'camera';
 
@@ -35,6 +35,8 @@ export interface AppState {
   /** Các profile calibrate đã lưu và profile đang dùng. */
   calibrations: CalibrationProfile[];
   calibration: CalibrationProfile | null;
+  /** Khung hình (data URL) gửi từ màn hình khác sang màn hình calibrate. */
+  calibrationImage: { src: string; width: number; height: number } | null;
   error: string | null;
 }
 
@@ -81,6 +83,7 @@ export class AppModel {
       sourceFps: 0,
       calibrations: [],
       calibration: null,
+      calibrationImage: null,
       error: null,
     };
   }
@@ -206,6 +209,17 @@ export class AppModel {
     await this.deps.repo.setSetting(ACTIVE_CALIBRATION_KEY, saved.id);
     await this.loadCalibrations();
     return saved;
+  }
+
+  /** Mở màn hình calibrate với khung hình cho trước (ví dụ lấy từ video đã quay). */
+  calibrateFromImage(image: { src: string; width: number; height: number }): void {
+    this.set({ calibrationImage: image, screen: 'calibrate' });
+  }
+
+  consumeCalibrationImage(): AppState['calibrationImage'] {
+    const image = this.state.calibrationImage;
+    if (image) this.set({ calibrationImage: null });
+    return image;
   }
 
   async useCalibration(id: string): Promise<void> {

@@ -16,12 +16,12 @@ export interface SimulatorOptions {
   missRate?: number;
 }
 
-/** Vị trí đứng nghỉ sau khi ván kết thúc. */
+/** Sau khi ván kết thúc, người chơi ra lưới bắt tay (ngoài ô giao cầu). */
 const IDLE_POSITIONS: PlayerSample[] = [
-  { id: 'blue', x: 1.5, y: 3 },
-  { id: 'red', x: 4.5, y: 3 },
-  { id: 'purple', x: 1.5, y: 10.4 },
-  { id: 'yellow', x: 4.5, y: 10.4 },
+  { id: 'blue', x: 2.5, y: 6.1 },
+  { id: 'red', x: 3.6, y: 6.1 },
+  { id: 'purple', x: 2.5, y: 7.3 },
+  { id: 'yellow', x: 3.6, y: 7.3 },
 ];
 
 function clamp(v: number, lo: number, hi: number): number {

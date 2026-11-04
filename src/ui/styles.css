@@ -734,3 +734,91 @@ form.row input {
   flex-direction: column;
   gap: 6px;
 }
+
+/* Phân tích video */
+
+.analyze-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 320px);
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .analyze-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.progress {
+  height: 8px;
+  background: var(--panel-2);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress .bar {
+  height: 100%;
+  background: var(--accent);
+  transition: width 200ms;
+}
+
+.score-input {
+  width: 72px;
+}
+
+tr.clickable {
+  cursor: pointer;
+}
+
+tr.clickable:hover {
+  background: var(--panel);
+}
+
+/* Danh sách kiểm tra */
+
+.checklist {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 6px 16px;
+}
+
+.checklist li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0;
+}
+
+.check-row {
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 8px;
+  align-items: center;
+}
+
+.check-icon {
+  width: 18px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.checklist li.ok .check-icon {
+  color: var(--accent);
+}
+
+.checklist li.warn .check-icon {
+  color: var(--warn);
+}
+
+.checklist li.todo .check-icon {
+  color: var(--muted);
+}

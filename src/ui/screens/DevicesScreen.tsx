@@ -1,6 +1,30 @@
 import { useEffect, useState } from 'preact/hooks';
+import { MANUAL_CHECKS, buildChecklist, isReady } from '../../app/checklist';
+import { activePlayers } from '../../app/session';
+import { hasLocalModel } from '../../cv/poseRunner';
 import { CameraPreview } from '../components/CameraPreview';
+import { useAppState } from '../context';
 import { useCameraState, useServices } from '../services';
+
+const MANUAL_KEY = 'checklist-manual';
+
+/** Đánh dấu các mục kiểm tra bằng mắt; nhớ theo buổi chơi trong trình duyệt. */
+function loadManual(sessionId: string | null): Record<string, boolean> {
+  try {
+    const saved = JSON.parse(localStorage.getItem(MANUAL_KEY) ?? '{}');
+    return saved.sessionId === sessionId ? saved.checks : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveManual(sessionId: string | null, checks: Record<string, boolean>): void {
+  try {
+    localStorage.setItem(MANUAL_KEY, JSON.stringify({ sessionId, checks }));
+  } catch {
+    // Không lưu được thì chỉ mất dấu tích khi tải lại trang.
+  }
+}
 
 const STATUS_LABEL = {
   off: 'Chưa kết nối',
@@ -12,7 +36,14 @@ const STATUS_LABEL = {
 
 export function DevicesScreen() {
   const { camera, storage, wakeLock } = useServices();
+  const { session, calibration } = useAppState();
   const cam = useCameraState();
+  const [localModel, setLocalModel] = useState(false);
+  const [manual, setManual] = useState(() => loadManual(session?.id ?? null));
+
+  useEffect(() => {
+    void hasLocalModel().then(setLocalModel);
+  }, []);
   const [folder, setFolder] = useState(storage.directoryName);
   const [folderOk, setFolderOk] = useState<boolean | null>(null);
 
@@ -29,12 +60,58 @@ export function DevicesScreen() {
     }
   };
 
+  const checklist = buildChecklist({
+    cameraStatus: cam.status,
+    cameraLabel: cam.label,
+    cameraSize: cam.width && cam.height ? { width: cam.width, height: cam.height } : null,
+    calibration,
+    videoFolder: folder,
+    videoFolderWritable: folderOk !== false,
+    wakeLockSupported: wakeLock.supported,
+    localModel,
+    activePlayers: session ? activePlayers(session).length : 0,
+    manual,
+  });
+  const manualIds = new Set(MANUAL_CHECKS.map((c) => c.id));
+  const toggleManual = (id: string) => {
+    const next = { ...manual, [id]: !manual[id] };
+    setManual(next);
+    saveManual(session?.id ?? null, next);
+  };
+
   return (
     <section class="screen">
       <header class="screen-header">
-        <h1>Thiết bị</h1>
-        <span class="muted">Kết nối iPhone qua Continuity Camera và chọn nơi lưu video trước buổi chơi.</span>
+        <h1>Thiết bị và kiểm tra</h1>
+        <span class="muted">Làm lần lượt trước mỗi buổi chơi.</span>
       </header>
+
+      <div class="card">
+        <h3>
+          Kiểm tra trước buổi{' '}
+          <span class={isReady(checklist) ? 'badge' : 'muted small'}>
+            {isReady(checklist) ? '· sẵn sàng' : `· còn ${checklist.filter((i) => i.status === 'todo').length} việc`}
+          </span>
+        </h3>
+        <ul class="checklist">
+          {checklist.map((item) => (
+            <li key={item.id} class={item.status}>
+              {manualIds.has(item.id) ? (
+                <label class="check-row">
+                  <input type="checkbox" checked={item.status === 'ok'} onChange={() => toggleManual(item.id)} />
+                  <span>{item.label}</span>
+                </label>
+              ) : (
+                <span class="check-row">
+                  <span class="check-icon">{item.status === 'ok' ? '✓' : item.status === 'warn' ? '!' : '○'}</span>
+                  <span>{item.label}</span>
+                </span>
+              )}
+              {item.hint && item.status !== 'ok' && <span class="muted small">{item.hint}</span>}
+            </li>
+          ))}
+        </ul>
+      </div>
 
       <div class="device-grid">
         <div class="card">
