@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CameraManager } from './cameraManager';
 import { pickPreferredDevice } from './devices';
 import { chooseMimeType, extensionFor } from './format';
 import { MatchVideoRecorder, type RecorderEnv } from './matchVideoRecorder';
@@ -189,5 +190,58 @@ describe('WakeLockGuard', () => {
     expect(requests).toBe(2);
     await guard.release();
     expect(guard.active).toBe(false);
+  });
+});
+
+describe('chia sẻ tab/màn hình thay camera', () => {
+  function fakeStream() {
+    const listeners: Record<string, () => void> = {};
+    const track = {
+      label: 'web-contents-media-stream://youtube',
+      getSettings: () => ({ width: 1920, height: 1080 }),
+      addEventListener: (type: string, fn: () => void) => (listeners[type] = fn),
+      stop: () => undefined,
+    };
+    const stream = { getVideoTracks: () => [track], getTracks: () => [track] } as unknown as MediaStream;
+    return { stream, end: () => listeners.ended?.() };
+  }
+  const settings = { getSetting: async () => undefined, setSetting: async () => undefined };
+
+  it('dùng được như camera, dừng chia sẻ thì về trạng thái tắt và không tự kết nối lại', async () => {
+    const { stream, end } = fakeStream();
+    let userMediaCalls = 0;
+    const devices = {
+      getUserMedia: async () => {
+        userMediaCalls += 1;
+        throw new Error('không dùng');
+      },
+      enumerateDevices: async () => [],
+      addEventListener: () => undefined,
+      getDisplayMedia: async () => stream,
+    };
+    const camera = new CameraManager(settings, devices as never);
+    expect(await camera.connectScreen()).toBe(true);
+    expect(camera.getState()).toMatchObject({ status: 'on', width: 1920, height: 1080 });
+    expect(camera.current).toBe(stream);
+
+    end();
+    expect(camera.getState().status).toBe('off');
+    expect(camera.current).toBeNull();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(userMediaCalls).toBe(0);
+  });
+
+  it('người dùng hủy hộp thoại chọn tab thì báo lỗi rõ ràng', async () => {
+    const devices = {
+      getUserMedia: async () => fakeStream().stream,
+      enumerateDevices: async () => [],
+      addEventListener: () => undefined,
+      getDisplayMedia: async () => {
+        throw Object.assign(new Error('denied'), { name: 'NotAllowedError' });
+      },
+    };
+    const camera = new CameraManager(settings, devices as never);
+    expect(await camera.connectScreen()).toBe(false);
+    expect(camera.getState()).toMatchObject({ status: 'error', error: 'Đã hủy chia sẻ màn hình' });
   });
 });

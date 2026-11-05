@@ -140,9 +140,14 @@ export function DevicesScreen() {
             {cam.status === 'on' ? (
               <button onClick={() => camera.disconnect()}>Ngắt</button>
             ) : (
-              <button class="primary" onClick={() => void camera.connect()}>
-                Kết nối camera
-              </button>
+              <>
+                <button class="primary" onClick={() => void camera.connect()}>
+                  Kết nối camera
+                </button>
+                <button onClick={() => void camera.connectScreen()} title="Thử app bằng video trận đấu đang mở ở tab khác (ví dụ YouTube)">
+                  Dùng tab/màn hình
+                </button>
+              </>
             )}
           </div>
           <CameraPreview stream={cam.status === 'on' ? camera.current : null} />

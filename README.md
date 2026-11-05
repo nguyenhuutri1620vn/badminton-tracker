@@ -111,7 +111,8 @@ Yêu cầu gốc: `raw_requirement.md`. Quy tắc làm việc: `CLAUDE.md`.
 
 ## Giới hạn hiện tại
 
-- Chưa thử với camera và video thật có người; độ chính xác thực tế cần đo bằng màn hình Phân tích video.
+- Đã thử trên video YouTube: nhận ra đủ 4 người ở 62–97% khung hình, nhưng chưa có video ván thật của nhóm để đo độ chính xác chấm điểm. Quay ván đầu tiên ở 1080p rồi đo bằng màn hình Phân tích video.
+- Người ở nửa sân xa nhỏ và hay bị lưới che chân, nên đặt camera càng cao càng tốt.
 - Engine xét tối đa 3 pha giữa hai lần phát nhìn thấy. Camera bỏ lỡ nhiều đội hình liên tiếp thì có thể sai điểm.
 - Hết ván nên bấm **Kết thúc ván** ngay: nếu người chơi tình cờ đứng yên đúng một đội hình phát cầu hợp lệ trước khi bấm, app có thể cộng thêm một pha.
 - Một sân, một buổi; chưa có thống kê qua nhiều buổi, dashboard di chuyển, cân bằng trình độ.

@@ -13,7 +13,8 @@ export interface CameraState {
   error: string | null;
 }
 
-type MediaDevicesLike = Pick<MediaDevices, 'getUserMedia' | 'enumerateDevices' | 'addEventListener'>;
+type MediaDevicesLike = Pick<MediaDevices, 'getUserMedia' | 'enumerateDevices' | 'addEventListener'> &
+  Partial<Pick<MediaDevices, 'getDisplayMedia'>>;
 
 const DEVICE_KEY = 'cameraDeviceId';
 const RECONNECT_MS = 2000;
@@ -36,6 +37,8 @@ export class CameraManager {
   private listeners = new Set<(state: CameraState) => void>();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private wanted = false;
+  /** Nguồn hình đang là tab/màn hình chia sẻ (không tự kết nối lại được vì Chrome cần người bấm chọn). */
+  private screen = false;
 
   constructor(
     private readonly settings: SettingsStore,
@@ -79,6 +82,7 @@ export class CameraManager {
       return false;
     }
     this.wanted = true;
+    this.screen = false;
     this.clearReconnect();
     this.set({ status: 'connecting', error: null });
     try {
@@ -113,6 +117,33 @@ export class CameraManager {
     }
   }
 
+  /**
+   * Lấy hình từ một tab hoặc màn hình (ví dụ video YouTube trận cầu lông) thay cho camera, để thử app khi chưa ra sân.
+   * Mọi bước sau (nhận diện, chấm điểm, ghi video) chạy y như với camera thật.
+   */
+  async connectScreen(): Promise<boolean> {
+    if (!this.mediaDevices?.getDisplayMedia) {
+      this.set({ status: 'error', error: 'Trình duyệt không hỗ trợ chia sẻ màn hình' });
+      return false;
+    }
+    this.wanted = false;
+    this.clearReconnect();
+    this.set({ status: 'connecting', error: null });
+    try {
+      const stream = await this.mediaDevices.getDisplayMedia({
+        audio: false,
+        video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
+      });
+      this.screen = true;
+      this.attach(stream);
+      return true;
+    } catch (error) {
+      const name = (error as { name?: string })?.name;
+      this.set({ status: 'error', error: name === 'NotAllowedError' ? 'Đã hủy chia sẻ màn hình' : describeError(error) });
+      return false;
+    }
+  }
+
   disconnect(): void {
     this.wanted = false;
     this.clearReconnect();
@@ -129,6 +160,11 @@ export class CameraManager {
     track?.addEventListener('ended', () => {
       if (this.stream !== stream) return;
       this.stream = null;
+      if (this.screen) {
+        this.screen = false;
+        this.set({ status: 'off', error: 'Đã dừng chia sẻ màn hình' });
+        return;
+      }
       this.set({ status: 'lost', error: 'Mất kết nối camera, đang thử kết nối lại…' });
       this.scheduleReconnect();
     });

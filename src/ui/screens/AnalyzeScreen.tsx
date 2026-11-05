@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { getPoseLandmarker } from '../../cv/poseRunner';
+import { TiledPoseDetector } from '../../cv/tiledPose';
 import { VideoAnalysis, formatVideoTime, type AnalysisSummary } from '../../cv/videoAnalysis';
 import type { PlayerSample } from '../../core/serveFormation';
 import type { Score } from '../../core/types';
 import { MiniMap } from '../components/MiniMap';
 import { downloadText, useAppState, useModel } from '../context';
 
-/** Phân tích 12 khung mỗi giây của video, như khi chạy trực tiếp. */
-const ANALYSIS_FPS = 12;
+/** Phân tích 8 khung mỗi giây của video: mỗi khung chạy nhận diện trên nhiều ô nên khá chậm. */
+const ANALYSIS_FPS = 8;
 
 /** File webm do MediaRecorder ghi thường không có thời lượng: tua tới cuối để trình duyệt tính ra. */
 async function ensureDuration(video: HTMLVideoElement): Promise<void> {
@@ -57,7 +58,7 @@ export function AnalyzeScreen() {
     model.calibrateFromImage({ src: canvas.toDataURL('image/jpeg', 0.9), width: canvas.width, height: canvas.height });
   };
 
-  /** Tua từng bước 1/12 giây và chạy pose trên từng khung (chậm hơn thời gian thực nhưng không bỏ khung nào). */
+  /** Tua từng bước 1/8 giây và chạy pose trên từng khung (chậm hơn thời gian thực nhưng không bỏ khung nào). */
   const run = async () => {
     const video = videoRef.current;
     if (!video || !calibration) return;
@@ -72,6 +73,7 @@ export function AnalyzeScreen() {
       return;
     }
     const analysis = new VideoAnalysis(calibration);
+    const pose = new TiledPoseDetector(landmarker, calibration);
     analysisRef.current = analysis;
     stopRef.current = false;
     setStatus('running');
@@ -83,8 +85,7 @@ export function AnalyzeScreen() {
     for (let time = 0; time < video.duration && !stopRef.current; time += step) {
       video.currentTime = time;
       await new Promise<void>((resolve) => video.addEventListener('seeked', () => resolve(), { once: true }));
-      const result = landmarker.detectForVideo(video, Math.round(time * 1000) + 1);
-      analysis.processFrame(time * 1000, result.landmarks);
+      analysis.processFrame(time * 1000, pose.detect(video));
       if (performance.now() - lastUi > 250) {
         lastUi = performance.now();
         setProgress(time / video.duration);

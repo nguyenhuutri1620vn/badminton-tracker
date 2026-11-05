@@ -6,8 +6,9 @@ const LOCAL_MODEL = '/models/pose_landmarker_lite.task';
 const CDN_MODEL =
   'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task';
 
-/** Số người tối đa nhận diện: 4 người chơi cộng người chờ đứng gần sân. */
-const NUM_POSES = 6;
+/** Số người tối đa trong một ô (xem `TiledPoseDetector`): mỗi ô thường chỉ chứa 1–2 người. */
+const NUM_POSES = 3;
+const MIN_CONFIDENCE = 0.25;
 
 export async function hasLocalModel(): Promise<boolean> {
   try {
@@ -21,18 +22,23 @@ export async function hasLocalModel(): Promise<boolean> {
 
 let shared: Promise<PoseLandmarker> | null = null;
 
-/** Tạo (một lần) bộ nhận diện pose; ưu tiên GPU, lỗi thì chuyển sang CPU. */
+/**
+ * Tạo (một lần) bộ nhận diện pose; ưu tiên GPU, lỗi thì chuyển sang CPU.
+ * Chế độ IMAGE vì mỗi khung được cắt thành nhiều ô, các ô không liên tục với nhau như một luồng video.
+ */
 export function getPoseLandmarker(): Promise<PoseLandmarker> {
   shared ??= (async () => {
     const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
     const modelAssetPath = (await hasLocalModel()) ? LOCAL_MODEL : CDN_MODEL;
     const options = (delegate: 'GPU' | 'CPU') => ({
       baseOptions: { modelAssetPath, delegate },
-      runningMode: 'VIDEO' as const,
+      runningMode: 'IMAGE' as const,
       numPoses: NUM_POSES,
-      minPoseDetectionConfidence: 0.4,
-      minPosePresenceConfidence: 0.4,
-      minTrackingConfidence: 0.4,
+      // Ngưỡng thấp để bắt được người ở nửa sân xa (nhỏ, bị lưới che chân); người giả ngoài sân bị
+      // FrameProcessor và tracker loại.
+      minPoseDetectionConfidence: MIN_CONFIDENCE,
+      minPosePresenceConfidence: MIN_CONFIDENCE,
+      minTrackingConfidence: MIN_CONFIDENCE,
     });
     try {
       return await PoseLandmarker.createFromOptions(vision, options('GPU'));

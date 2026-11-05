@@ -4,6 +4,9 @@ import type { CalibrationProfile } from '../data/types';
 import { CourtTracker, type CourtDetection } from './courtTracker';
 import { extractPerson, type Landmark } from './poseFeatures';
 
+/** Hai phát hiện gần hơn khoảng này là cùng một người (thấy ở chỗ hai ô nhận diện chồng nhau). */
+const SAME_PERSON_M = 0.6;
+
 /**
  * Biến kết quả pose của một khung hình thành khung vị trí (mét, theo màu).
  * Landmark chuẩn hóa 0..1 nên chỉ cần nhân với kích thước ảnh lúc calibrate:
@@ -21,7 +24,7 @@ export class FrameProcessor {
     this.tracker = tracker;
   }
 
-  /** Vị trí trên sân (mét) của từng người phát hiện được. */
+  /** Vị trí trên sân (mét) của từng người phát hiện được; người bị thấy hai lần chỉ giữ lần tin cậy hơn. */
   toCourt(poses: Landmark[][]): CourtDetection[] {
     const { imageWidth: w, imageHeight: h } = this.calibration;
     const detections: CourtDetection[] = [];
@@ -31,10 +34,18 @@ export class FrameProcessor {
       const [x, y] = this.mapping.toCourt([person.foot[0] * w, person.foot[1] * h]);
       detections.push({ x, y, handRaised: person.handRaised, confidence: person.confidence });
     }
-    return detections;
+    return dedupe(detections);
   }
 
   process(t: number, poses: Landmark[][]): PositionFrame {
     return { t, players: this.tracker.update(t, this.toCourt(poses)) };
   }
+}
+
+function dedupe(detections: CourtDetection[]): CourtDetection[] {
+  const kept: CourtDetection[] = [];
+  for (const d of [...detections].sort((a, b) => b.confidence - a.confidence)) {
+    if (kept.every((k) => Math.hypot(k.x - d.x, k.y - d.y) >= SAME_PERSON_M)) kept.push(d);
+  }
+  return kept;
 }

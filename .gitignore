@@ -5,3 +5,4 @@ dist
 *.mp4
 public/mediapipe
 public/models/*.task
+.playwright-mcp
