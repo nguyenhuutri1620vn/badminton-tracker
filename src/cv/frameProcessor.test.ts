@@ -3,7 +3,7 @@ import { MatchEngine } from '../core/scoreEngine';
 import { ServeFormationDetector } from '../core/serveFormation';
 import { FrameProcessor } from './frameProcessor';
 import { MatchSimulator } from './simulator';
-import { TEST_CALIBRATION, posesFromPositions } from './testing/landmarks';
+import { TEST_CALIBRATION, peopleFromPositions } from './testing/people';
 
 function seededRandom(seed: number) {
   let state = seed;
@@ -20,7 +20,7 @@ describe('FrameProcessor', () => {
       { id: 'a', x: 1.5, y: 2 },
       { id: 'b', x: 4.5, y: 4.5 },
     ];
-    const detections = processor.toCourt(posesFromPositions(players));
+    const detections = processor.toCourt(peopleFromPositions(players));
     expect(detections).toHaveLength(2);
     detections.forEach((d, i) => expect(Math.hypot(d.x - players[i]!.x, d.y - players[i]!.y)).toBeLessThan(0.05));
   });
@@ -40,7 +40,7 @@ describe('FrameProcessor', () => {
 
       while (!simulator.finished) {
         const truth = simulator.next(1000 / 15);
-        const frame = processor.process(truth.t, posesFromPositions(truth.players, TEST_CALIBRATION, bystanders));
+        const frame = processor.process(truth.t, peopleFromPositions(truth.players, TEST_CALIBRATION, bystanders));
         const obs = detector.push(frame);
         if (obs) engine.observeServe(obs);
       }
@@ -57,7 +57,7 @@ describe('FrameProcessor', () => {
       const engine = new MatchEngine();
       const feed = () => {
         const truth = simulator.next(1000 / 15);
-        const obs = detector.push(processor.process(truth.t, posesFromPositions(truth.players)));
+        const obs = detector.push(processor.process(truth.t, peopleFromPositions(truth.players)));
         if (!obs) return;
         engine.observeServe(obs);
         // Như khi host không bấm popup: hết giờ thì không phải phát lại.

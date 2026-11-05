@@ -91,8 +91,34 @@ function cloneBranch(branch: Branch): Branch {
   };
 }
 
-/** Số pha tối đa giữa hai lần phát mà engine xét, tức là bỏ lỡ tối đa (MAX_RALLIES_BETWEEN_SERVES - 1) lần phát liên tiếp. */
+/**
+ * Số pha tối đa giữa hai lần phát mà engine xét khi không đếm được số pha, tức là bỏ lỡ tối đa
+ * (MAX_RALLIES_BETWEEN_SERVES - 1) lần phát liên tiếp.
+ */
 const MAX_RALLIES_BETWEEN_SERVES = 3;
+/** Khi đếm được số pha (RallyCounter), engine xét tới chừng này pha giữa hai lần phát. */
+const MAX_COUNTED_RALLIES = 6;
+
+/**
+ * Bỏ lỡ lần phát mà số pha đếm được xác nhận: vẫn phạt (số đếm có thể sai) nhưng nhẹ hơn nhiều so với bỏ lỡ
+ * không có bằng chứng (mức 1).
+ */
+const CONFIRMED_MISS_PENALTY = 0.3;
+/** Mỗi pha lệch so với số pha đếm được. Nhỏ hơn 1 vì đếm pha chỉ là bằng chứng mềm. */
+const RALLY_COUNT_MISMATCH_PENALTY = 0.5;
+
+/** Số pha dài nhất cần xét cho lần phát này. */
+function maxRallies(obs: ServeObservation): number {
+  const counted = obs.ralliesSincePrevious ?? 0;
+  return Math.min(Math.max(MAX_RALLIES_BETWEEN_SERVES, counted), MAX_COUNTED_RALLIES);
+}
+
+/** Mức phạt cho một diễn biến `rallies` pha phải giả định `missedServes` lần phát bị bỏ lỡ, có xét số pha đếm được. */
+function rallyPenalty(rallies: number, missedServes: number, counted: number | null | undefined): number {
+  if (counted === null || counted === undefined) return missedServes;
+  if (rallies === counted) return missedServes * CONFIRMED_MISS_PENALTY;
+  return missedServes + RALLY_COUNT_MISMATCH_PENALTY * Math.abs(rallies - counted);
+}
 
 /** Mọi dãy đội thắng có độ dài length, kết thúc bằng `last`. */
 function sequencesEndingWith(last: Team, length: number): Team[][] {
@@ -100,14 +126,14 @@ function sequencesEndingWith(last: Team, length: number): Team[][] {
   return sequencesEndingWith(last, length - 1).flatMap((rest) => TEAMS.map((first) => [first, ...rest]));
 }
 
-/** Mọi diễn biến tối đa MAX_RALLIES_BETWEEN_SERVES pha kết thúc bằng việc `team` giành quyền phát cầu. */
-function explanationsFor(branch: Branch, team: Team): Explanation[] {
+/** Mọi diễn biến tối đa `maxLength` pha kết thúc bằng việc `team` giành quyền phát cầu. */
+function explanationsFor(branch: Branch, team: Team, maxLength: number): Explanation[] {
   // Chưa biết ai phát thì có thể camera đã bỏ lỡ cả lần phát đầu tiên.
   const missedBefore = branch.servingTeam === null ? 1 : 0;
   const explanations: Explanation[] = [];
   if (branch.servingTeam === null) explanations.push({ winners: [], missedServes: 0, replay: false });
   if (branch.servingTeam === team) explanations.push({ winners: [], missedServes: 0, replay: true });
-  for (let length = 1; length <= MAX_RALLIES_BETWEEN_SERVES; length += 1) {
+  for (let length = 1; length <= maxLength; length += 1) {
     for (const winners of sequencesEndingWith(team, length)) {
       explanations.push({ winners, missedServes: length - 1 + missedBefore, replay: false });
     }
@@ -200,7 +226,7 @@ function expand(
     }
 
     for (const team of teams) {
-      for (const explanation of explanationsFor(branch, team)) {
+      for (const explanation of explanationsFor(branch, team, maxRallies(obs))) {
         if (explanation.replay && decision === false) continue;
         if (low && (explanation.missedServes > 0 || explanation.replay)) continue;
 
@@ -218,7 +244,11 @@ function expand(
           if (mismatch) continue;
           child.lowApplied += 1;
         } else {
-          child.penalty += explanation.missedServes;
+          // Lần phát đầu tiên camera thấy (chưa có điểm) không so được với số pha đếm.
+          const first = explanation.winners.length === 0 && !explanation.replay;
+          child.penalty += first
+            ? explanation.missedServes
+            : rallyPenalty(explanation.winners.length, explanation.missedServes, obs.ralliesSincePrevious);
           // Phát lại hiếm ngang với bỏ lỡ một lần phát, nên chỉ hiện popup khi không có cách giải thích nào tốt hơn.
           if (explanation.replay) {
             child.penalty += 1;
@@ -243,7 +273,7 @@ function expand(
 function gameEndingChildren(branch: Branch, obs: ServeObservation): Branch[] {
   const missedBefore = branch.servingTeam === null ? 1 : 0;
   const children: Branch[] = [];
-  for (let length = 1; length <= MAX_RALLIES_BETWEEN_SERVES; length += 1) {
+  for (let length = 1; length <= maxRallies(obs); length += 1) {
     for (const last of TEAMS) {
       for (const winners of sequencesEndingWith(last, length)) {
         const missedServes = length - 1 + missedBefore;
@@ -251,7 +281,7 @@ function gameEndingChildren(branch: Branch, obs: ServeObservation): Branch[] {
         const applied = applyWinners(child, winners, obs.id, obs.t, missedServes > 0);
         // Chỉ nhận chuỗi mà pha cuối của chuỗi đúng là pha kết thúc ván.
         if (applied < winners.length || !isGameOver(child.score)) continue;
-        child.penalty += missedServes + AFTER_FINISH_PENALTY;
+        child.penalty += rallyPenalty(length, missedServes, obs.ralliesSincePrevious) + AFTER_FINISH_PENALTY;
         child.notes.push({ kind: 'afterFinish', sourceId: obs.id });
         children.push(child);
       }

@@ -22,6 +22,11 @@ export interface ServeObservation {
   courtPlayers?: Record<Team, CourtPlayers>;
   /** 0..1 */
   confidence: number;
+  /**
+   * Số pha kể từ lần phát nhìn thấy trước (gồm cả pha của lần phát này), đếm từ số lần người chơi dừng lại chuẩn bị
+   * phát (RallyCounter). null hoặc không có khi không đếm được (lần phát đầu tiên). Chỉ là bằng chứng mềm.
+   */
+  ralliesSincePrevious?: number | null;
 }
 
 /** Hai người trong một đội chỉ đổi ô khi đội đó thắng pha lúc đang phát cầu. */

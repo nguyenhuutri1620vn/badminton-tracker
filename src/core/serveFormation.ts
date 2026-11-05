@@ -1,4 +1,5 @@
 import { distanceToNet, isInServiceBox, serviceCourtSide, teamOfPosition } from './court';
+import { RallyCounter } from './rallyCounter';
 import type { CourtPlayers, ServeObservation, ServiceCourt, Team } from './types';
 
 /** Vị trí một người chơi trong một khung hình, đã quy về mét trên sân. */
@@ -34,6 +35,12 @@ export const DEFAULT_DETECTOR_CONFIG: DetectorConfig = {
 /** Độ tin cậy của một đội hình phát cầu đã qua đủ các kiểm tra hình học. */
 const FORMATION_CONFIDENCE = 0.9;
 
+/**
+ * Lần dừng của chính lần phát này (hoặc lần phát trước) có thể được ghi nhận lệch vài giây so với lúc nhận ra
+ * đội hình, vì tốc độ đo qua cửa sổ 1 giây. Chỉ đếm lần dừng nằm hẳn giữa hai lần phát, cách mỗi đầu khoảng này.
+ */
+const PAUSE_GUARD_MS = 3000;
+
 interface Mean {
   x: number;
   y: number;
@@ -47,10 +54,18 @@ export class ServeFormationDetector {
   private window: PositionFrame[] = [];
   private emittedAt: Map<string, Mean> | null = null;
   private nextId = 1;
+  private readonly rallies = new RallyCounter();
+  private previousServeT: number | null = null;
 
   constructor(private readonly config: DetectorConfig = DEFAULT_DETECTOR_CONFIG) {}
 
+  /** Thời điểm các lần cả sân dừng lại chuẩn bị phát (kể cả những lần không nhận ra đội hình). */
+  get pauseTimes(): readonly number[] {
+    return this.rallies.pauseTimes;
+  }
+
   push(frame: PositionFrame): ServeObservation | null {
+    this.rallies.push(frame);
     this.window.push(frame);
     const cutoff = frame.t - this.config.stillDurationMs;
     while (this.window.length > 1 && this.window[1]!.t <= cutoff) this.window.shift();
@@ -67,7 +82,14 @@ export class ServeFormationDetector {
     if (!means) return null;
 
     const observation = this.recognize(frame, means);
-    if (observation) this.emittedAt = means;
+    if (!observation) return null;
+    this.emittedAt = means;
+    // Mỗi lần dừng nằm giữa hai lần phát nhìn thấy là một lần phát bị bỏ lỡ, tức thêm một pha.
+    observation.ralliesSincePrevious =
+      this.previousServeT === null
+        ? null
+        : 1 + this.rallies.countBetween(this.previousServeT + PAUSE_GUARD_MS, frame.t - PAUSE_GUARD_MS);
+    this.previousServeT = frame.t;
     return observation;
   }
 

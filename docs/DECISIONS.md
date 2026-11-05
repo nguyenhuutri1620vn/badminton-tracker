@@ -64,9 +64,15 @@ Quyết định do Claude tự chọn theo đề xuất khi làm theo `docs/PLAN
 | D50 | Người bị mép ô cắt | Bỏ người có thân/chân vượt ra ngoài mép ô (trừ mép trùng mép khung hình); gộp hai phát hiện cách nhau dưới 0,6 m | Ô chỉ thấy nửa người thì chân bị đoán từ hông, lệch hơn 1 m, tạo ra người thứ hai không có thật. |
 | D51 | Ngưỡng tin cậy pose | 0,25 (trước là 0,4) | Người ở nửa xa nhỏ và bị lưới che chân; ngưỡng 0,2 thấy thêm ~40% người ở nửa xa. Người giả ngoài sân bị vùng nhận người và tracker loại. |
 | D52 | Tốc độ phân tích video | 8 khung/giây video (trước 12) | Mỗi khung giờ chạy 6 ô (~150–220 ms trong Chrome không có màn hình); 8 khung/giây vẫn đủ cho cửa sổ đứng yên 1 giây. |
+| D53 | Bộ phát hiện người | Thay MediaPipe Pose bằng MediaPipe Object Detector EfficientDet-Lite2 (lớp person, ngưỡng 0,25), điểm chân = giữa đáy khung; không thêm thư viện | Trên 100 khung video phong trào: thấy đủ 4 người 73% (pose theo ô 12%), nhanh gấp đôi. Lite0 kém hơn ở nửa xa. Bỏ D49–D51 phần pose. |
+| D54 | Ô cho bộ phát hiện khung | Tối đa 3 ô, ô nửa xa ≈ 6 lần chiều cao người xa nhất, ô không dẹt hơn 16:9 (được lấn ra ngoài vùng sân để giữ tỉ lệ) | MediaPipe kéo giãn ảnh vào thành hình vuông: ô 1280×482 làm người bị bóp còn 1/3 bề ngang, nửa gần mất 55% khung. |
+| D55 | Mất tín hiệu tay | Chấp nhận: đội phát luôn do engine suy ra từ ô giao cầu, vị trí và số pha | Bộ phát hiện khung không thấy tay; tín hiệu này vốn không bắt buộc. |
+| D56 | Đếm pha | Đếm số lần cả sân dừng lại (trung vị tốc độ qua 0,6 s dưới 0,3 m/s, ít nhất 0,5 s, sau khi đã có người chạy trên 0,7 m/s). Số pha giữa hai lần phát nhìn thấy = 1 + số lần dừng nằm hẳn giữa (bỏ 3 s mỗi đầu) | Tách pha theo tốc độ đánh không được: người chơi phong trào đánh 0,5–1,3 m/s, ngang lúc đi bộ. Cửa sổ 1 s thì bỏ sót lần dừng ngắn 1,5 s. |
+| D57 | Engine dùng số pha | Diễn biến có số pha khớp số đếm: bỏ lỡ lần phát chỉ phạt 0,3 (thay vì 1); lệch mỗi pha phạt 0,5; khi đếm được nhiều pha xét tới 6 pha giữa hai lần phát | Bằng chứng mềm: đếm sai không loại khả năng đúng. Giả lập bỏ lỡ 10% lần phát: ván đúng 55% → 85%. |
 
 ## Giới hạn đã biết
 
 - Sau pha cuối, nếu người chơi đứng yên đúng một đội hình phát cầu hợp lệ (đúng ô, đúng chéo, đúng vị trí theo luật) trước khi host bấm Kết thúc ván, app có thể hiểu là thêm một pha. Khắc phục: bấm Kết thúc ván ngay khi hết ván.
 - Camera bỏ lỡ từ 3 lần phát liên tiếp trở lên thì engine không giải thích được và có thể sai điểm.
+- Đếm pha cho biết có bao nhiêu pha nhưng không cho biết đội nào thắng từng pha: bỏ lỡ nhiều lần phát liền nhau thì engine vẫn có nhiều tỉ số khả dĩ và hỏi host lúc kết thúc ván. Các pha sau lần phát cuối cùng nhìn thấy chưa được đếm khi kết thúc ván.
 - Chạy thử trên video phong trào (YouTube 30iGjvPvJ4I, 10 phút, 720p, góc rộng, ngày 2026-11-05): mới bắt được 6 lần phát. Người nửa xa chỉ cao ~45 px và bị lưới che nên chỉ thấy đủ 2 người ở 66% khung; độ lệch vị trí của họ (0,3–0,5 m) thường vượt ngưỡng đứng yên 0,25 m. Nhóm trong video cũng không đứng đúng đội hình phát cầu rõ ràng. Chưa nới ngưỡng vì không có tỉ số thật để kiểm chứng; cần video ván thật của nhóm (quay 1080p) để chỉnh ngưỡng đứng yên theo độ sâu.

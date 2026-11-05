@@ -95,6 +95,26 @@ Mã nguồn:
   - `npm run build` sạch, toàn bộ test pass, kiểm tra luồng trong trình duyệt.
   - Đã kiểm tra: danh sách kiểm tra ở màn hình Thiết bị, README, 150 test, build; ván giả lập trong Chrome.
 
+## Giai đoạn 2: chấm được trên video thật
+
+Chạy thử trên video YouTube (2026-11-05) cho thấy chiến lược "chỉ nhìn đội hình phát cầu" quá mong manh: mới bắt được khoảng 6 lần phát trên 30–40 pha trong 10 phút. Chi tiết trong `docs/DECISIONS.md`.
+
+- [x] **11. Phát hiện người dạng khung thay cho pose**
+  - Dùng mô hình phát hiện người (khung chữ nhật), điểm chân = giữa đáy khung; giữ chia ô nếu vẫn cần.
+  - Xong khi: trên video thử, tỉ lệ khung thấy đủ 4 người cao hơn pose theo ô, thời gian mỗi khung không tăng.
+  - Đã kiểm tra: EfficientDet-Lite2 chạy 3 ô (ô không dẹt hơn 16:9). Video phong trào 10 phút: đủ 4 người 98% khung (pose theo ô 62%), 151 ms/khung (219 ms).
+- [x] **12. Đếm pha bằng chuyển động**
+  - Pha đánh: người chơi chạy nhanh; giữa hai pha: đi chậm, đứng. Phát hiện ranh giới pha từ tốc độ di chuyển.
+  - Engine dùng số pha đếm được giữa hai lần phát nhìn thấy để thu hẹp số khả năng, chịu được bỏ lỡ nhiều lần phát hơn.
+  - Xong khi: test giả lập với tỉ lệ bỏ lỡ đội hình cao cho tỉ lệ ván đúng cao hơn hiện tại; chạy được trên video thử.
+  - Đã kiểm tra: tách pha theo tốc độ không được (người chơi phong trào đánh chậm như đi bộ); đếm lần cả sân dừng lại chuẩn bị phát thì được. Giả lập bỏ lỡ 10% / 20% / 30% lần phát: ván đúng 55→85%, 8→57%, 3→45%. Video phong trào: 23 lần dừng, 16 lần phát nhận ra trong 10 phút; nhóm trong video không đứng đúng vị trí phát cầu nên không đo được tỉ số.
+- [ ] **13. Ngưỡng đứng yên theo độ sâu**
+  - Đo độ đứng yên bằng pixel trên ảnh (hoặc ngưỡng mét tăng theo khoảng cách tới camera) thay cho 0,25 m cố định.
+- [ ] **14. Báo khi app chưa chắc**
+  - Bảng điểm đánh dấu rõ khi engine còn nhiều khả năng, để người chơi thấy và sửa sớm.
+- [ ] **15. Đo trên ván thật của nhóm**
+  - Host quay 1–2 ván (1080p, camera cao), chạy Phân tích video với tỉ số thật; quyết định có cần nới nguyên tắc "chỉ dùng camera" hay không.
+
 ## Việc tiếp theo (cần host)
 
 1. Thử camera iPhone thật trong Chrome (màn hình Thiết bị), calibrate sân thật.

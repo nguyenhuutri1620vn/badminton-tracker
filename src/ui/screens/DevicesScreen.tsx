@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { MANUAL_CHECKS, buildChecklist, isReady } from '../../app/checklist';
 import { activePlayers } from '../../app/session';
-import { hasLocalModel } from '../../cv/poseRunner';
+import { hasLocalModel } from '../../cv/personDetector';
 import { CameraPreview } from '../components/CameraPreview';
 import { useAppState } from '../context';
 import { useCameraState, useServices } from '../services';

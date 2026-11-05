@@ -8,13 +8,14 @@
 ## Quyết định đã chốt
 - **Thiết bị**: iPhone chỉ làm camera (sau đường biên cuối, trên cao), kết nối Continuity Camera (ưu tiên cáp USB). MacBook đặt gần đó, xử lý mọi thứ.
 - **Nền tảng**: web app chạy trong Chrome trên MacBook, không backend, miễn phí 100%.
-- **Stack**: TypeScript + Vite, test bằng Vitest. CV trong trình duyệt bằng MediaPipe Pose Landmarker. Video bằng `MediaRecorder`, ghi file qua File System Access API. Dữ liệu lưu IndexedDB trên Mac, xuất JSON/CSV.
+- **Stack**: TypeScript + Vite, test bằng Vitest. CV trong trình duyệt bằng MediaPipe Object Detector (EfficientDet-Lite2, lớp person) chạy theo ô. Video bằng `MediaRecorder`, ghi file qua File System Access API. Dữ liệu lưu IndexedDB trên Mac, xuất JSON/CSV.
 - **Chấm điểm tự động**: suy ra đội thắng pha từ đội hình phát cầu pha kế tiếp, không theo dõi quả cầu. Nhóm chơi đứng đúng ô phát cầu theo luật.
 - **Không đổi sân**: đội xác định theo nửa sân (gần/xa camera).
 - **Suy ra đội thắng pha** từ 3 tín hiệu, mạnh nhất trước:
   1. Ai đứng ô nào trong mỗi đội (theo màu chấm): hai người chỉ đổi ô khi đội đó thắng pha lúc đang phát. Cần tracking giữ đúng màu suốt ván.
   2. Ô giao cầu và chẵn lẻ điểm.
-  3. Tín hiệu tay từ pose (người nhận giơ vợt) để biết đội phát; không bắt buộc, quan sát có thể để đội phát là null.
+  3. Số pha đếm từ chuyển động (mỗi lần cả sân dừng lại chuẩn bị phát là một pha): bằng chứng mềm, giúp engine chịu được bỏ lỡ nhiều lần phát.
+  - Tín hiệu tay (người nhận giơ vợt) không còn: bộ phát hiện khung người không thấy tay; đội phát luôn do engine suy ra.
 - **Engine nhiều khả năng**: giữ song song các diễn biến chưa phân biệt được, loại dần theo số lần phải suy đoán. Bảng điểm chỉ hiện tỉ số mà mọi khả năng đồng ý.
 - **Phát lại**: đội hình lặp lại y hệt pha trước → popup "Phát lại?"; host xác nhận trong 5s thì không cộng điểm, hết 5s thì cộng +2 cho đội phát (thắng liền 2 pha, camera bỏ lỡ 1 lần phát).
 - **Không xoay tua, không ghép đội**: host tự chọn 4 người và chia đội trước mỗi ván.
@@ -49,7 +50,7 @@ Dashboard di chuyển, thống kê qua nhiều buổi, gửi kết quả cho kh�
 ## Kiến trúc
 - Logic nghiệp vụ (score engine, bộ suy luận đội hình) là module TypeScript thuần, không phụ thuộc giao diện hay camera, có unit test.
 - Dữ liệu chính: `Player`, `Session` (buổi chơi), `Match` (ván, gắn với một file video), `Rally` (pha).
-- Pipeline CV (trong trình duyệt): camera → MediaPipe pose → homography về mét → bộ phát hiện đội hình phát cầu → sự kiện cho score engine. Đồng thời lưu `time, player, x_m, y_m` cho mini map và dashboard sau này.
+- Pipeline CV (trong trình duyệt): camera → phát hiện người theo ô (điểm chân = giữa đáy khung) → homography về mét → tracker 4 màu → bộ phát hiện đội hình phát cầu và bộ đếm pha → sự kiện cho score engine. Đồng thời lưu `time, player, x_m, y_m` cho mini map và dashboard sau này.
 - Giữ Mac không ngủ khi đang ghi (Wake Lock). Mất camera giữa ván thì giữ tỉ số và tiếp tục khi kết nối lại.
 
 ## Quy ước làm việc
@@ -58,6 +59,6 @@ Dashboard di chuyển, thống kê qua nhiều buổi, gửi kết quả cho kh�
 - Không thêm thư viện nặng nếu chưa cần cho MVP.
 
 ## Trạng thái hiện tại
-- MVP đã xong 10 bước trong `docs/PLAN.md`; quyết định Claude tự chọn và giới hạn đã biết: `docs/DECISIONS.md`. Hướng dẫn sử dụng: `README.md`.
-- Đã kiểm tra bằng test (150) và giả lập trong Chrome. Chưa thử với camera iPhone và video thật có người.
-- Việc tiếp theo: host thử camera thật, quay 1–2 ván, chạy màn hình Phân tích video để đo độ chính xác và chỉnh tham số.
+- MVP đã xong 10 bước trong `docs/PLAN.md`; giai đoạn 2 (bước 11–15) để chấm được trên video thật. Đã xong 11 (phát hiện người dạng khung) và 12 (đếm pha). Quyết định và giới hạn: `docs/DECISIONS.md`. Hướng dẫn: `README.md`.
+- Đo trên video YouTube: thấy đủ 4 người 98% khung (video phong trào 720p). Chưa đo được độ chính xác chấm điểm vì chưa có video ván thật của nhóm.
+- Việc tiếp theo: bước 13 (ngưỡng đứng yên theo độ sâu), 14 (báo khi chưa chắc), 15 (host quay ván thật, chạy Phân tích video với tỉ số thật).

@@ -1,6 +1,6 @@
 import { useState } from 'preact/hooks';
 import { CameraFrameSource } from '../../cv/cameraFrameSource';
-import { getPoseLandmarker } from '../../cv/poseRunner';
+import { getPersonDetector } from '../../cv/personDetector';
 import { SimulatedFrameSource } from '../../cv/simulator';
 import type { Team } from '../../core/types';
 import { EndDialog } from '../components/EndDialog';
@@ -60,8 +60,8 @@ export function LiveScreen() {
     setLoadingCv(true);
     setCvError(null);
     try {
-      const landmarker = await getPoseLandmarker();
-      model.attachSource(new CameraFrameSource(() => camera.current, calibration, landmarker), 'camera');
+      const detector = await getPersonDetector();
+      model.attachSource(new CameraFrameSource(() => camera.current, calibration, detector), 'camera');
     } catch (error) {
       setCvError(`Không tải được mô hình nhận diện người: ${(error as Error).message}`);
     } finally {

@@ -5,4 +5,6 @@ dist
 *.mp4
 public/mediapipe
 public/models/*.task
+public/models/*.tflite
+public/test-video
 .playwright-mcp

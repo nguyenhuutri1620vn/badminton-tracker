@@ -26,7 +26,7 @@ Cần: MacBook có Node.js 20 trở lên, Chrome, iPhone cùng Apple ID (Continu
 npm install
 ```
 
-Tải mô hình nhận diện người về máy (khoảng 5,6 MB) để dùng ở sân không có internet:
+Tải mô hình phát hiện người về máy (EfficientDet-Lite2, khoảng 12 MB) để dùng ở sân không có internet:
 
 ```bash
 npm run model
@@ -103,7 +103,7 @@ Cấu trúc mã nguồn:
 | `src/app/` | Buổi chơi, MatchController, AppModel, danh sách kiểm tra |
 | `src/data/` | IndexedDB, xuất JSON/CSV |
 | `src/media/` | Camera, ghi video, lưu file, giữ màn hình sáng |
-| `src/cv/` | MediaPipe Pose, tracker 4 màu, giả lập, phân tích video |
+| `src/cv/` | Phát hiện người theo ô (MediaPipe Object Detector), tracker 4 màu, giả lập, phân tích video |
 | `src/ui/` | Giao diện Preact |
 | `docs/` | Kế hoạch (`PLAN.md`) và nhật ký quyết định (`DECISIONS.md`) |
 

@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { getPoseLandmarker } from '../../cv/poseRunner';
-import { TiledPoseDetector } from '../../cv/tiledPose';
+import { getPersonDetector, TiledPersonDetector } from '../../cv/personDetector';
 import { VideoAnalysis, formatVideoTime, type AnalysisSummary } from '../../cv/videoAnalysis';
 import type { PlayerSample } from '../../core/serveFormation';
 import type { Score } from '../../core/types';
 import { MiniMap } from '../components/MiniMap';
 import { downloadText, useAppState, useModel } from '../context';
 
-/** Phân tích 8 khung mỗi giây của video: mỗi khung chạy nhận diện trên nhiều ô nên khá chậm. */
+/** Phân tích 8 khung mỗi giây của video: đủ cho cửa sổ đứng yên 1 giây, nhanh hơn chạy mọi khung. */
 const ANALYSIS_FPS = 8;
 
 /** File webm do MediaRecorder ghi thường không có thời lượng: tua tới cuối để trình duyệt tính ra. */
@@ -58,22 +57,22 @@ export function AnalyzeScreen() {
     model.calibrateFromImage({ src: canvas.toDataURL('image/jpeg', 0.9), width: canvas.width, height: canvas.height });
   };
 
-  /** Tua từng bước 1/8 giây và chạy pose trên từng khung (chậm hơn thời gian thực nhưng không bỏ khung nào). */
+  /** Tua từng bước 1/8 giây và chạy nhận diện người trên từng khung (chậm hơn thời gian thực nhưng không bỏ khung nào). */
   const run = async () => {
     const video = videoRef.current;
     if (!video || !calibration) return;
     setError(null);
     setStatus('loading');
-    let landmarker;
+    let detector;
     try {
-      landmarker = await getPoseLandmarker();
+      detector = await getPersonDetector();
     } catch (e) {
       setError(`Không tải được mô hình nhận diện người: ${(e as Error).message}`);
       setStatus('idle');
       return;
     }
     const analysis = new VideoAnalysis(calibration);
-    const pose = new TiledPoseDetector(landmarker, calibration);
+    const people = new TiledPersonDetector(detector, calibration);
     analysisRef.current = analysis;
     stopRef.current = false;
     setStatus('running');
@@ -85,7 +84,7 @@ export function AnalyzeScreen() {
     for (let time = 0; time < video.duration && !stopRef.current; time += step) {
       video.currentTime = time;
       await new Promise<void>((resolve) => video.addEventListener('seeked', () => resolve(), { once: true }));
-      analysis.processFrame(time * 1000, pose.detect(video));
+      analysis.processFrame(time * 1000, people.detect(video));
       if (performance.now() - lastUi > 250) {
         lastUi = performance.now();
         setProgress(time / video.duration);
@@ -108,12 +107,14 @@ export function AnalyzeScreen() {
       fullFrameRatio: summary.fullFrameRatio,
       truth: truth.near && truth.far ? { near: +truth.near, far: +truth.far } : null,
       finalScore,
+      pauses: summary.pauses.map((t) => formatVideoTime(t)),
       observations: summary.entries.map((e) => ({
         time: formatVideoTime(e.observation.t),
         t: e.observation.t,
         servingTeam: e.observation.servingTeam,
         court: e.observation.court,
         courtPlayers: e.observation.courtPlayers,
+        ralliesSincePrevious: e.observation.ralliesSincePrevious,
         scoreAfter: e.scoreAfter,
         scoreCertain: e.scoreCertain,
       })),
@@ -178,7 +179,7 @@ export function AnalyzeScreen() {
                   )}
                 </div>
                 <div class="muted">
-                  {summary.entries.length} lần phát · thấy đủ 4 người {Math.round(summary.fullFrameRatio * 100)}% khung hình
+                  {summary.entries.length} lần phát nhận ra · {summary.pauses.length} lần dừng chuẩn bị phát · thấy đủ 4 người {Math.round(summary.fullFrameRatio * 100)}% khung hình
                 </div>
                 <div class="row">
                   Tỉ số thật:

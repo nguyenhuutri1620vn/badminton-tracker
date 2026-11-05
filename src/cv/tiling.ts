@@ -1,7 +1,6 @@
 import { COURT } from '../core/court';
 import { courtMapping, type CourtMapping, type Point } from '../core/homography';
 import type { CalibrationProfile } from '../data/types';
-import type { Landmark } from './poseFeatures';
 
 /** Một ô cắt từ khung hình, tính theo pixel của ảnh lúc calibrate. */
 export interface Tile {
@@ -18,16 +17,27 @@ export interface TilingOptions {
   marginM: number;
   /** Tỉ lệ chồng lên nhau giữa hai ô kề nhau, để người đứng ở mép ô vẫn nằm trọn trong ô bên cạnh. */
   overlap: number;
-  /** Mỗi ô tốn khoảng 30 ms nhận diện; nhiều ô quá thì không đủ khung hình mỗi giây. */
+  /** Mỗi ô tốn khoảng 30–50 ms nhận diện; nhiều ô quá thì không đủ khung hình mỗi giây. */
   maxTiles: number;
+  /** Cạnh ô tối thiểu so với người đứng gần camera nhất trong nửa sân, để người đó nằm trọn trong ô. */
+  nearFit: number;
+  /** Cạnh ô so với người đứng xa nhất trong nửa sân: lớn hơn thì người xa quá nhỏ với mô hình. */
+  farZoom: number;
 }
 
-export const DEFAULT_TILING: TilingOptions = { personHeightM: 1.8, marginM: 1, overlap: 0.25, maxTiles: 6 };
-
-/** Ô của nửa sân gần nhỏ nhất bằng 1,3 lần người đứng sát camera, để người đó nằm trọn trong ô. */
-const NEAR_FIT = 1.3;
-/** Ô bằng 2,4 lần người đứng xa nhất trong nửa sân: lớn hơn thì người xa quá nhỏ với mô hình. */
-const FAR_ZOOM = 2.4;
+/**
+ * Cho bộ phát hiện khung người EfficientDet-Lite2 (ảnh vào 448 px): nhận được người cao khoảng 30 px trên ảnh
+ * vào, nên ô có thể lớn gấp 6 lần người xa nhất. Đo trên video thật: 2 ô (nửa xa, nửa gần) thấy đủ 4 người
+ * ở 73% khung, so với 52% khi chạy cả khung.
+ */
+export const DEFAULT_TILING: TilingOptions = {
+  personHeightM: 1.8,
+  marginM: 1,
+  overlap: 0.25,
+  maxTiles: 3,
+  nearFit: 1.3,
+  farZoom: 6,
+};
 
 interface Band {
   /** Vùng cần phủ (pixel). */
@@ -80,7 +90,7 @@ function planBand(
     top,
     right,
     bottom,
-    size: Math.max(FAR_ZOOM * personFar, NEAR_FIT * personNear),
+    size: Math.max(options.farZoom * personFar, options.nearFit * personNear),
     personWidth: 0.5 * personNear,
   };
 }
@@ -90,21 +100,37 @@ function countAlong(length: number, size: number, overlap: number): number {
   return Math.ceil((length - size) / (size - overlap)) + 1;
 }
 
-function tilesOf(band: Band, overlap: number): Tile[] {
+/**
+ * Bộ phát hiện kéo giãn ảnh vào thành hình vuông (không giữ tỉ lệ): ô dẹt 2,65:1 làm người bị bóp còn 1/3 bề ngang
+ * và không được nhận ra nữa, trong khi cả khung 16:9 vẫn nhận tốt. Ô không được dẹt hơn tỉ lệ này.
+ */
+const MAX_ASPECT = 16 / 9;
+
+function tilesOf(band: Band, overlap: number, frameWidth: number, frameHeight: number): Tile[] {
   const bw = band.right - band.left;
   const bh = band.bottom - band.top;
-  const w = Math.min(band.size, bw);
-  const h = Math.min(band.size, bh);
+  let w = Math.min(band.size, bw);
+  let h = Math.min(band.size, bh);
+  // Ô dẹt thì mở rộng chiều còn lại (lấn ra ngoài vùng phủ, vẫn trong khung hình), không được thì thu hẹp.
+  h = Math.min(Math.max(h, w / MAX_ASPECT), frameHeight);
+  w = Math.min(Math.max(w, h / MAX_ASPECT), frameWidth, h * MAX_ASPECT);
   const minOverlap = (size: number) => Math.min(Math.max(overlap * size, band.personWidth), 0.9 * size);
   const nx = countAlong(bw, w, minOverlap(w));
   const ny = countAlong(bh, h, minOverlap(h));
+  const place = (start: number, length: number, size: number, n: number, i: number, frame: number) => {
+    // Chia đều để ô cuối chạm đúng mép vùng phủ; ô lớn hơn vùng phủ thì đặt giữa vùng phủ.
+    const pos = n === 1 ? start + (length - size) / 2 : start + ((length - size) * i) / (n - 1);
+    return Math.round(Math.min(Math.max(pos, 0), frame - size));
+  };
   const tiles: Tile[] = [];
   for (let j = 0; j < ny; j += 1) {
     for (let i = 0; i < nx; i += 1) {
-      // Chia đều để ô cuối chạm đúng mép vùng phủ.
-      const x = nx === 1 ? band.left : band.left + ((bw - w) * i) / (nx - 1);
-      const y = ny === 1 ? band.top : band.top + ((bh - h) * j) / (ny - 1);
-      tiles.push({ x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) });
+      tiles.push({
+        x: place(band.left, bw, w, nx, i, frameWidth),
+        y: place(band.top, bh, h, ny, j, frameHeight),
+        w: Math.round(w),
+        h: Math.round(h),
+      });
     }
   }
   return tiles;
@@ -112,8 +138,8 @@ function tilesOf(band: Band, overlap: number): Tile[] {
 
 /**
  * Chia khung hình thành các ô để nhận diện người, dựa trên calibrate.
- * MediaPipe thu cả khung về khoảng 256 px trước khi tìm người, nên người ở nửa sân xa (cao ~100 px trên ảnh 720p)
- * gần như không được nhận ra. Mỗi nửa sân được phủ bằng các ô đủ nhỏ để người xa nhất vẫn đủ lớn,
+ * Bộ phát hiện thu cả khung về kích thước ảnh vào của mô hình trước khi tìm người, nên người ở nửa sân xa
+ * (cao 45–100 px trên ảnh 720p) dễ bị bỏ sót. Mỗi nửa sân được phủ bằng các ô đủ nhỏ để người xa nhất vẫn đủ lớn,
  * nhưng đủ lớn để người đứng gần camera nằm trọn trong một ô.
  * Quá nhiều ô thì phóng to ô của nửa đang có nhiều ô hơn cho đến khi không vượt maxTiles.
  */
@@ -130,37 +156,12 @@ export function planTiles(
     planBand(mapping, -m, COURT.netY, width, height, options),
   ].filter((b): b is Band => b !== null);
 
-  const count = (b: Band) => tilesOf(b, options.overlap).length;
+  const count = (b: Band) => tilesOf(b, options.overlap, width, height).length;
   for (let guard = 0; bands.reduce((sum, b) => sum + count(b), 0) > options.maxTiles && guard < 50; guard += 1) {
     // Phóng to nửa đang có nhiều ô hơn (bằng nhau thì nửa gần, nơi người vốn đã lớn),
     // để không nửa nào bị dồn về một ô quá lớn so với người trong đó.
     const band = bands.reduce((a, b) => (count(b) >= count(a) ? b : a));
     band.size *= 1.15;
   }
-  return bands.flatMap((b) => tilesOf(b, options.overlap));
-}
-
-/** Đổi landmark chuẩn hóa theo ô về chuẩn hóa theo cả khung hình. */
-export function tileToFrameLandmarks(landmarks: Landmark[], tile: Tile, width: number, height: number): Landmark[] {
-  return landmarks.map((p) => ({ ...p, x: (tile.x + p.x * tile.w) / width, y: (tile.y + p.y * tile.h) / height }));
-}
-
-/** Landmark thân và chân (vai, hông, gối, cổ chân, gót, mũi chân): tay vươn ra ngoài ô không tính là bị cắt. */
-const BODY = [11, 12, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32];
-/** Landmark bàn chân. */
-const FEET = [27, 28, 29, 30, 31, 32];
-const EDGE = 0.01;
-
-/**
- * Người bị mép ô cắt ngang (mép đó không phải mép khung hình): ô chỉ thấy một phần người nên vị trí chân
- * bị đoán từ hông và lệch cả mét. Bỏ đi được vì `planTiles` bảo đảm người đó nằm trọn trong một ô khác.
- * MediaPipe vẫn đoán vị trí các điểm nằm ngoài ô (tọa độ < 0 hoặc > 1), nên dựa vào đó để biết người bị cắt.
- */
-export function isCutByTile(landmarks: Landmark[], tile: Tile, width: number, height: number): boolean {
-  const body = BODY.map((i) => landmarks[i]).filter((p): p is Landmark => p !== undefined);
-  const feet = FEET.map((i) => landmarks[i]).filter((p): p is Landmark => p !== undefined);
-  const cutLeft = tile.x > 0.5 && body.some((p) => p.x < EDGE);
-  const cutRight = tile.x + tile.w < width - 0.5 && body.some((p) => p.x > 1 - EDGE);
-  const cutBottom = tile.y + tile.h < height - 0.5 && feet.some((p) => p.y > 1 - EDGE);
-  return cutLeft || cutRight || cutBottom;
+  return bands.flatMap((b) => tilesOf(b, options.overlap, width, height));
 }

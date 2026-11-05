@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MatchSimulator } from './simulator';
-import { TEST_CALIBRATION, posesFromPositions } from './testing/landmarks';
+import { TEST_CALIBRATION, peopleFromPositions } from './testing/people';
 import { VideoAnalysis, formatVideoTime } from './videoAnalysis';
 
 function seededRandom(seed: number) {
@@ -17,7 +17,7 @@ describe('VideoAnalysis', () => {
     const analysis = new VideoAnalysis(TEST_CALIBRATION);
     while (!simulator.finished) {
       const truth = simulator.next(1000 / 12);
-      analysis.processFrame(truth.t, posesFromPositions(truth.players));
+      analysis.processFrame(truth.t, peopleFromPositions(truth.players));
     }
     const summary = analysis.summary();
     expect(summary.entries.length).toBe(simulator.winners.length);

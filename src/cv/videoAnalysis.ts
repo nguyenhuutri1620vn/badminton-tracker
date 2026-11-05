@@ -3,7 +3,7 @@ import { ServeFormationDetector, type PlayerSample } from '../core/serveFormatio
 import type { MatchState, Score, ServeObservation } from '../core/types';
 import type { CalibrationProfile } from '../data/types';
 import { FrameProcessor } from './frameProcessor';
-import type { Landmark } from './poseFeatures';
+import type { PersonDetection } from './personBoxes';
 
 export interface AnalysisEntry {
   observation: ServeObservation;
@@ -17,6 +17,8 @@ export interface AnalysisSummary {
   /** Tỉ lệ khung hình thấy đủ 4 người. */
   fullFrameRatio: number;
   entries: AnalysisEntry[];
+  /** Thời điểm (ms) các lần cả sân dừng lại chuẩn bị phát, mỗi lần là một pha. */
+  pauses: number[];
   state: MatchState;
 }
 
@@ -38,8 +40,8 @@ export class VideoAnalysis {
   }
 
   /** t: thời điểm trong video (ms). */
-  processFrame(t: number, poses: Landmark[][]): AnalysisEntry | null {
-    const frame = this.processor.process(t, poses);
+  processFrame(t: number, people: PersonDetection[]): AnalysisEntry | null {
+    const frame = this.processor.process(t, people);
     this.frames += 1;
     if (frame.players.length === 4) this.fullFrames += 1;
     this.lastPlayers = frame.players;
@@ -61,6 +63,7 @@ export class VideoAnalysis {
       frames: this.frames,
       fullFrameRatio: this.frames === 0 ? 0 : this.fullFrames / this.frames,
       entries: [...this.entries],
+      pauses: [...this.detector.pauseTimes],
       state: this.engine.state,
     };
   }
