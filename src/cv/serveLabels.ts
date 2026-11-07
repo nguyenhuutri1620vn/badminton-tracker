@@ -112,3 +112,17 @@ export function evaluateServeTeams(
     accuracy: correct / (correct + wrongTeam),
   };
 }
+
+/** Chưa đoán được lúc phát thì xem quanh thời điểm này sau lần dừng (đứng chuẩn bị phát thường 1–3 giây). */
+const SERVE_AFTER_PAUSE_MS = 2000;
+
+/**
+ * Gán nhãn nhanh: mỗi lần cả sân dừng lại chuẩn bị phát là một chỗ host cần xem. Lấy lúc phát đoán từ chuyển động
+ * nếu nó nằm giữa lần dừng này và lần dừng sau, không thì 2 giây sau lần dừng.
+ */
+export function reviewTimes(pauses: readonly number[], guesses: readonly ServePrediction[]): number[] {
+  return pauses.map((pause, i) => {
+    const next = pauses[i + 1] ?? Infinity;
+    return guesses.find((g) => g.t > pause && g.t < next)?.t ?? pause + SERVE_AFTER_PAUSE_MS;
+  });
+}

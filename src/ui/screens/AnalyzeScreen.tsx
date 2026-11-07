@@ -6,6 +6,7 @@ import {
   evaluateServeTeams,
   parseLabelFile,
   removeNearestLabel,
+  reviewTimes,
   serializeLabels,
   type ServeEvaluation,
   type ServeLabel,
@@ -27,6 +28,13 @@ async function ensureDuration(video: HTMLVideoElement): Promise<void> {
   });
   video.currentTime = 0;
 }
+
+/** Gán nhãn nhanh: phát chậm từ 2 giây trước tới 2,5 giây sau mỗi lần phát dự kiến. */
+const REVIEW_BEFORE_MS = 2000;
+const REVIEW_AFTER_MS = 2500;
+const REVIEW_RATE = 0.5;
+/** Lần dừng đã có nhãn trong khoảng này thì coi là đã xem. */
+const REVIEWED_WITHIN_MS = 3000;
 
 const labelKey = (fileName: string) => `serveLabels:${fileName}`;
 
@@ -86,7 +94,69 @@ export function AnalyzeScreen() {
     if (fileName) saveLabels(fileName, next);
   };
 
+  // Gán nhãn nhanh: lần lượt xem quanh từng lần dừng chuẩn bị phát app đã tìm thấy.
+  const [review, setReview] = useState<number | null>(null);
+  const reviewStopRef = useRef<number | null>(null);
+  const reviewList = summary ? reviewTimes(summary.pauses, summary.serveGuesses) : [];
+  const labelNear = (t: number) => labels.find((l) => Math.abs(l.t - t) <= REVIEWED_WITHIN_MS);
+
+  const playReview = (index: number) => {
+    const video = videoRef.current;
+    const at = reviewList[index];
+    if (!video || at === undefined) return;
+    video.currentTime = Math.max(0, at - REVIEW_BEFORE_MS) / 1000;
+    video.playbackRate = REVIEW_RATE;
+    reviewStopRef.current = (at + REVIEW_AFTER_MS) / 1000;
+    void video.play();
+  };
+
+  const goToReview = (index: number) => {
+    if (index >= reviewList.length) return exitReview();
+    setReview(index);
+    playReview(index);
+  };
+
+  const startReview = () => {
+    const firstOpen = reviewList.findIndex((t) => !labelNear(t));
+    goToReview(firstOpen < 0 ? 0 : firstOpen);
+  };
+
+  const exitReview = () => {
+    setReview(null);
+    reviewStopRef.current = null;
+    const video = videoRef.current;
+    if (video) {
+      video.pause();
+      video.playbackRate = 1;
+    }
+  };
+
+  /** Đang phát thì lấy đúng lúc host bấm; đã dừng ở cuối đoạn thì lấy lúc phát dự kiến. */
+  const labelReview = (team: Team) => {
+    const video = videoRef.current;
+    const at = review === null ? undefined : reviewList[review];
+    if (!video || at === undefined || review === null) return;
+    const t = video.paused ? at : Math.round(video.currentTime * 1000);
+    updateLabels(addLabel(labels, { t, team }));
+    goToReview(review + 1);
+  };
+
+  // Dừng ở cuối đoạn đang xem.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const onTime = () => {
+      if (reviewStopRef.current !== null && video.currentTime >= reviewStopRef.current) {
+        reviewStopRef.current = null;
+        video.pause();
+      }
+    };
+    video.addEventListener('timeupdate', onTime);
+    return () => video.removeEventListener('timeupdate', onTime);
+  }, [videoUrl]);
+
   // Gán nhãn bằng phím khi xem lại video: G = đội gần phát, X = đội xa phát, Z = xóa nhãn gần nhất.
+  // Khi gán nhãn nhanh: G/X gán rồi sang lần tiếp, S bỏ qua, R xem lại, Esc thoát.
   useEffect(() => {
     if (!videoUrl || status === 'running') return;
     const onKey = (e: KeyboardEvent) => {
@@ -96,6 +166,15 @@ export function AnalyzeScreen() {
       if (!video) return;
       const t = Math.round(video.currentTime * 1000);
       const key = e.key.toLowerCase();
+      if (review !== null) {
+        if (key === 'g' || key === 'x') labelReview(key === 'g' ? 'near' : 'far');
+        else if (key === 's') goToReview(review + 1);
+        else if (key === 'r') playReview(review);
+        else if (key === 'escape') exitReview();
+        else return;
+        e.preventDefault();
+        return;
+      }
       if (key === 'g' || key === 'x') updateLabels(addLabel(labels, { t, team: key === 'g' ? 'near' : 'far' }));
       else if (key === 'z') updateLabels(removeNearestLabel(labels, t));
       else return;
@@ -103,7 +182,7 @@ export function AnalyzeScreen() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [videoUrl, status, labels, fileName]);
+  }, [videoUrl, status, labels, fileName, review, summary]);
 
   useEffect(() => () => void (videoUrl && URL.revokeObjectURL(videoUrl)), [videoUrl]);
 
@@ -112,6 +191,7 @@ export function AnalyzeScreen() {
     setVideoUrl(URL.createObjectURL(file));
     setFileName(file.name);
     setLabels(loadLabels(file.name));
+    setReview(null);
     setSummary(null);
     setFinalScore(null);
     setStatus('idle');
@@ -269,7 +349,42 @@ export function AnalyzeScreen() {
                   Mở file nhãn
                   <input type="file" accept="application/json,.json" onChange={(e) => e.currentTarget.files?.[0] && importLabels(e.currentTarget.files[0])} />
                 </label>
+                {review === null && (
+                  <button class="primary" disabled={reviewList.length === 0 || status === 'running'} onClick={startReview}>
+                    Gán nhãn nhanh{reviewList.length > 0 ? ` (${reviewList.length} lần dừng)` : ''}
+                  </button>
+                )}
               </div>
+              {review === null && reviewList.length === 0 && (
+                <div class="muted">Bấm Phân tích trước: gán nhãn nhanh đi lần lượt qua các lần dừng chuẩn bị phát app tìm thấy.</div>
+              )}
+              {review !== null && reviewList[review] !== undefined && (
+                <div class="review-panel">
+                  <div>
+                    Lần dừng <strong>{review + 1}/{reviewList.length}</strong> · quanh {formatVideoTime(reviewList[review]!)} · phát chậm{' '}
+                    {REVIEW_RATE}×
+                    {labelNear(reviewList[review]!) && <span class="muted"> · đã có nhãn {teamName(labelNear(reviewList[review]!)!.team)}</span>}
+                  </div>
+                  <div class="muted">Ai phát cầu trong đoạn này? Bấm lúc vợt chạm cầu càng tốt.</div>
+                  <div class="row">
+                    <button onClick={() => labelReview('near')}>
+                      Đội gần phát <kbd>G</kbd>
+                    </button>
+                    <button onClick={() => labelReview('far')}>
+                      Đội xa phát <kbd>X</kbd>
+                    </button>
+                    <button onClick={() => goToReview(review + 1)}>
+                      Không phải lần phát <kbd>S</kbd>
+                    </button>
+                    <button onClick={() => playReview(review)}>
+                      Xem lại <kbd>R</kbd>
+                    </button>
+                    <button onClick={exitReview}>
+                      Thoát <kbd>Esc</kbd>
+                    </button>
+                  </div>
+                </div>
+              )}
               {labels.length > 0 && (
                 <div class="label-list">
                   {labels.map((l) => (

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { addLabel, evaluateServeTeams, parseLabelFile, removeNearestLabel, serializeLabels } from './serveLabels';
+import {
+  addLabel,
+  evaluateServeTeams,
+  parseLabelFile,
+  removeNearestLabel,
+  reviewTimes,
+  serializeLabels,
+} from './serveLabels';
 
 describe('nhãn phát cầu', () => {
   it('thêm nhãn giữ thứ tự thời gian; bấm lại trong 1 giây thì thay nhãn cũ', () => {
@@ -59,5 +66,20 @@ describe('đánh giá đội phát so với nhãn', () => {
       { t: 25_000, team: 'far' },
     ]);
     expect(result).toMatchObject({ correct: 1, missed: 1, extra: 0 });
+  });
+});
+
+describe('các lần cần xem khi gán nhãn nhanh', () => {
+  it('mỗi lần dừng một mục: lấy lúc phát đoán được nếu nằm sau lần dừng, không thì 2 giây sau lần dừng', () => {
+    const pauses = [1000, 20_000, 40_000];
+    const guesses = [
+      { t: 3500, team: 'near' as const },
+      { t: 43_000, team: null },
+    ];
+    expect(reviewTimes(pauses, guesses)).toEqual([3500, 22_000, 43_000]);
+  });
+
+  it('lần đoán thuộc về lần dừng kế tiếp thì không dùng cho lần dừng trước', () => {
+    expect(reviewTimes([1000, 5000], [{ t: 6000, team: 'far' }])).toEqual([3000, 6000]);
   });
 });
