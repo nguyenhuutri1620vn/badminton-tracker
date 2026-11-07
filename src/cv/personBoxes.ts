@@ -4,6 +4,8 @@ import type { Tile } from './tiling';
 export interface PersonDetection {
   /** Điểm chạm sân: giữa đáy khung người. */
   foot: [number, number];
+  /** Đỉnh khung (đầu), chuẩn hóa theo chiều cao khung hình. Vẫn đúng khi chân bị lưới che. */
+  top: number;
   /** Tay cầm vợt giơ cao hơn vai; null khi không biết (bộ phát hiện khung không thấy được tay). */
   handRaised: boolean | null;
   /** Độ tin cậy của bộ phát hiện. */
@@ -38,6 +40,7 @@ export function isBoxCutByTile(box: PersonBox, tile: Tile, frameWidth: number, f
 export function personFromBox(box: PersonBox, tile: Tile, frameWidth: number, frameHeight: number): PersonDetection {
   return {
     foot: [(tile.x + box.x + box.w / 2) / frameWidth, (tile.y + box.y + box.h) / frameHeight],
+    top: (tile.y + box.y) / frameHeight,
     handRaised: null,
     confidence: box.score,
   };

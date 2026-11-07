@@ -108,7 +108,7 @@ Chạy thử trên video YouTube (2026-11-05) cho thấy chiến lược "chỉ 
   - Engine dùng số pha đếm được giữa hai lần phát nhìn thấy để thu hẹp số khả năng, chịu được bỏ lỡ nhiều lần phát hơn.
   - Xong khi: test giả lập với tỉ lệ bỏ lỡ đội hình cao cho tỉ lệ ván đúng cao hơn hiện tại; chạy được trên video thử.
   - Đã kiểm tra: tách pha theo tốc độ không được (người chơi phong trào đánh chậm như đi bộ); đếm lần cả sân dừng lại chuẩn bị phát thì được. Giả lập bỏ lỡ 10% / 20% / 30% lần phát: ván đúng 55→85%, 8→57%, 3→45%. Video phong trào: 23 lần dừng, 16 lần phát nhận ra trong 10 phút; nhóm trong video không đứng đúng vị trí phát cầu nên không đo được tỉ số.
-- [ ] **13. Ngưỡng đứng yên theo độ sâu**
+- [x] **13. Ngưỡng đứng yên theo độ sâu**
   - Đo độ đứng yên bằng pixel trên ảnh (hoặc ngưỡng mét tăng theo khoảng cách tới camera) thay cho 0,25 m cố định.
 - [ ] **14. Báo khi app chưa chắc**
   - Bảng điểm đánh dấu rõ khi engine còn nhiều khả năng, để người chơi thấy và sửa sớm.

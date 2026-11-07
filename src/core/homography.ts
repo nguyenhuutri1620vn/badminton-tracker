@@ -76,6 +76,38 @@ export const COURT_CORNERS_M: Point[] = [
 
 export const CORNER_LABELS = ['Góc gần bên trái', 'Góc gần bên phải', 'Góc xa bên phải', 'Góc xa bên trái'];
 
+/**
+ * Vạch ngang phía gần dùng để bấm 2 điểm đầu khi calibrate. Camera đặt thấp hoặc ống kính hẹp thì biên cuối gần
+ * nằm ngoài khung hình: bấm hai đầu một vạch khác nhìn thấy được, app tự suy ra hai góc biên cuối.
+ */
+export type NearReferenceLine = 'baseline' | 'doublesLongService' | 'shortService';
+
+/** Khoảng cách (mét) từ biên cuối gần tới vạch đó. */
+export const NEAR_LINE_Y: Record<NearReferenceLine, number> = {
+  baseline: 0,
+  doublesLongService: COURT.doublesLongServiceDistance,
+  shortService: COURT.netY - COURT.shortServiceDistance,
+};
+
+/** 4 điểm host bấm (hai đầu vạch phía gần đã chọn, góc xa-phải, góc xa-trái) tính bằng mét. */
+function referencePointsM(line: NearReferenceLine): Point[] {
+  const y = NEAR_LINE_Y[line];
+  return [[0, y], [COURT.width, y], COURT_CORNERS_M[2]!, COURT_CORNERS_M[3]!];
+}
+
+/** Từ 4 điểm đã bấm theo vạch phía gần đã chọn ra 4 góc sân trên ảnh (góc gần có thể nằm ngoài khung hình). */
+export function cornersFromReference(points: Point[], line: NearReferenceLine): Point[] {
+  if (line === 'baseline') return points;
+  const courtToImage = solveHomography(referencePointsM(line), points);
+  return COURT_CORNERS_M.map((p) => applyHomography(courtToImage, p));
+}
+
+/** Ngược lại: 4 góc sân đã lưu thành 4 điểm trên vạch đã chọn, để chỉnh lại calibrate cũ. */
+export function referenceFromCorners(corners: Point[], line: NearReferenceLine): Point[] {
+  const mapping = courtMapping(corners);
+  return referencePointsM(line).map((p) => mapping.toImage(p));
+}
+
 /** Chuyển đổi hai chiều giữa pixel ảnh và mét trên sân. */
 export interface CourtMapping {
   toCourt(point: Point): Point;

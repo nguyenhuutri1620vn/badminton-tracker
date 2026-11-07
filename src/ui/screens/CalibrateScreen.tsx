@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { courtLineSegments } from '../../core/court';
-import { CORNER_LABELS, courtMapping, validateCorners, type Point } from '../../core/homography';
+import {
+  CORNER_LABELS,
+  cornersFromReference,
+  courtMapping,
+  referenceFromCorners,
+  validateCorners,
+  type NearReferenceLine,
+  type Point,
+} from '../../core/homography';
 import type { CalibrationProfile } from '../../data/types';
 import { formatTime, useAppState, useModel } from '../context';
 import { renderSampleCourt, SAMPLE_SIZE } from '../sampleCourt';
@@ -23,13 +31,41 @@ function projectedLines(corners: Point[]): [Point, Point][] | null {
   }
 }
 
+const NEAR_LINE_NAMES: Record<NearReferenceLine, string> = {
+  baseline: 'biên cuối',
+  doublesLongService: 'vạch giao cầu dài đánh đôi',
+  shortService: 'vạch giao cầu ngắn',
+};
+
+/** Tên 4 điểm cần bấm theo vạch phía gần đã chọn. */
+function pointLabels(line: NearReferenceLine): string[] {
+  if (line === 'baseline') return CORNER_LABELS;
+  const name = NEAR_LINE_NAMES[line];
+  return [`Đầu trái ${name} (phía gần)`, `Đầu phải ${name} (phía gần)`, CORNER_LABELS[2]!, CORNER_LABELS[3]!];
+}
+
+/** 4 góc sân từ các điểm đã bấm; null nếu chưa đủ hoặc chưa hợp lệ. */
+function courtCornersOf(points: Point[], line: NearReferenceLine): Point[] | null {
+  if (points.length !== 4 || validateCorners(points)) return null;
+  try {
+    return cornersFromReference(points, line);
+  } catch {
+    return null;
+  }
+}
+
+const insideImage = (points: Point[], width: number, height: number) =>
+  points.every(([x, y]) => x >= 0 && x <= width && y >= 0 && y <= height);
+
 export function CalibrateScreen() {
   const model = useModel();
   const { calibration, calibrations } = useAppState();
   const { camera } = useServices();
   const cam = useCameraState();
   const [background, setBackground] = useState<Background | null>(null);
+  /** Các điểm host đã bấm/kéo, theo vạch phía gần nearLine. */
   const [corners, setCorners] = useState<Point[]>([]);
+  const [nearLine, setNearLine] = useState<NearReferenceLine>('baseline');
   const [name, setName] = useState('Sân của tôi');
   const [dragging, setDragging] = useState<number | null>(null);
   const [saved, setSaved] = useState(false);
@@ -50,8 +86,10 @@ export function CalibrateScreen() {
   // Đang căn camera: dùng kích thước camera; đang chấm góc: dùng kích thước ảnh.
   const size = background ?? (cam.width && cam.height ? { width: cam.width, height: cam.height } : SAMPLE_SIZE);
   const editing = background !== null;
-  const guideCorners = editing ? corners : (calibration?.imageCorners ?? []);
+  const courtCorners = useMemo(() => courtCornersOf(corners, nearLine), [corners, nearLine]);
+  const guideCorners = editing ? (courtCorners ?? []) : (calibration?.imageCorners ?? []);
   const lines = useMemo(() => projectedLines(guideCorners), [guideCorners]);
+  const labels = pointLabels(nearLine);
   const error = editing && corners.length === 4 ? validateCorners(corners) : null;
 
   const toImagePoint = (event: PointerEvent): Point => {
@@ -79,32 +117,44 @@ export function CalibrateScreen() {
     img.src = url;
   };
 
-  const startEditing = (bg: Background, initial: Point[] = []) => {
+  const startEditing = (bg: Background, initial: Point[] = [], line: NearReferenceLine = 'baseline') => {
     setBackground(bg);
     setCorners(initial);
+    setNearLine(line);
     setSaved(false);
   };
 
+  /** Đổi vạch phía gần: nếu đã đủ 4 điểm thì đổi các điểm sang vạch mới, giữ nguyên sân. */
+  const changeNearLine = (line: NearReferenceLine) => {
+    if (courtCorners) setCorners(referenceFromCorners(courtCorners, line));
+    else if (corners.length > 2) setCorners(corners.slice(0, 2));
+    setNearLine(line);
+  };
+
   const editExisting = (profile: CalibrationProfile) => {
+    // Góc gần nằm ngoài ảnh thì không kéo được: chuyển sang vạch phía gần đầu tiên nhìn thấy được.
+    const candidates: NearReferenceLine[] = ['baseline', 'doublesLongService', 'shortService'];
+    const line =
+      candidates.find((l) => insideImage(referenceFromCorners(profile.imageCorners, l), profile.imageWidth, profile.imageHeight)) ??
+      'baseline';
+    const points = referenceFromCorners(profile.imageCorners, line);
     if (liveStream) {
       capture();
-      setCorners(profile.imageCorners);
+      setCorners(points);
+      setNearLine(line);
     } else {
-      startEditing(
-        { src: renderSampleCourt(), width: profile.imageWidth, height: profile.imageHeight },
-        profile.imageCorners,
-      );
+      startEditing({ src: renderSampleCourt(), width: profile.imageWidth, height: profile.imageHeight }, points, line);
     }
     setName(profile.name);
   };
 
   const save = async () => {
-    if (!background || error || corners.length !== 4) return;
+    if (!background || error || !courtCorners) return;
     await model.saveCalibration({
       name: name.trim() || 'Sân',
       imageWidth: background.width,
       imageHeight: background.height,
-      imageCorners: corners,
+      imageCorners: courtCorners,
     });
     setBackground(null);
     setCorners([]);
@@ -118,7 +168,7 @@ export function CalibrateScreen() {
         <span class="muted">
           {editing
             ? corners.length < 4
-              ? `Bấm ${CORNER_LABELS[corners.length]!.toLowerCase()} của sân đánh đôi (${corners.length + 1}/4).`
+              ? `Bấm ${labels[corners.length]!.toLowerCase()} (sân đánh đôi, ${corners.length + 1}/4).`
               : 'Kéo các điểm để khớp góc sân. Lưới vàng phải trùng các vạch trên sân.'
             : 'Căn camera sao cho lưới vàng trùng vạch sân, hoặc chụp khung hình để calibrate mới.'}
         </span>
@@ -177,8 +227,17 @@ export function CalibrateScreen() {
           {editing ? (
             <>
               <h3>Calibrate mới</h3>
+              <label>
+                Vạch phía gần để bấm
+                <select value={nearLine} onChange={(e) => changeNearLine(e.currentTarget.value as NearReferenceLine)}>
+                  <option value="baseline">Biên cuối (góc sân)</option>
+                  <option value="doublesLongService">Vạch giao cầu dài đánh đôi (cách biên cuối 0,76 m)</option>
+                  <option value="shortService">Vạch giao cầu ngắn (cách lưới 1,98 m)</option>
+                </select>
+              </label>
+              <p class="muted">Không thấy biên cuối gần trong khung hình thì chọn vạch khác; app tự suy ra góc sân.</p>
               <ol class="corner-list">
-                {CORNER_LABELS.map((label, i) => (
+                {labels.map((label, i) => (
                   <li key={label} class={i < corners.length ? 'done' : ''}>
                     {label}
                   </li>
@@ -190,7 +249,7 @@ export function CalibrateScreen() {
                 <input value={name} onInput={(e) => setName(e.currentTarget.value)} />
               </label>
               <div class="row">
-                <button class="primary" disabled={corners.length !== 4 || Boolean(error)} onClick={save}>
+                <button class="primary" disabled={!courtCorners || Boolean(error)} onClick={save}>
                   Lưu
                 </button>
                 <button onClick={() => setCorners(corners.slice(0, -1))} disabled={corners.length === 0}>

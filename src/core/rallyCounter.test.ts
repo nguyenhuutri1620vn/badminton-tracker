@@ -49,6 +49,19 @@ describe('RallyCounter', () => {
     expect(counter.pauseTimes).toHaveLength(3);
   });
 
+  it('người ở xa rung vài pixel khi đứng chờ phát vẫn tính là dừng nếu biết độ phân giải ở đó', () => {
+    // Hai người xa nhảy 0,12 / −0,12 / 0 m theo từng khung (1–2 pixel khi 1 pixel là 0,1 m): cứ vài khung lại đo ra
+    // tốc độ 0,36 m/s, đủ làm mất lần dừng nếu không trừ nhiễu. Chu kỳ 3 khung để không trùng nhịp cửa sổ đo.
+    const shaky = (metersPerPixel: number) => (t: number) =>
+      formation('near', 'right').map((p) => {
+        if (p.y < 6.7) return { ...p, metersPerPixel: 0.02 };
+        const step = [0.12, -0.12, 0][Math.round(t / FRAME_MS) % 3]!;
+        return { ...p, y: p.y + step, metersPerPixel };
+      });
+    expect(run([[5000, moving], [2000, shaky(0.1)], [5000, moving], [2000, shaky(0.1)]]).pauseTimes).toHaveLength(2);
+    expect(run([[5000, moving], [2000, shaky(0.01)], [5000, moving], [2000, shaky(0.01)]]).pauseTimes).toHaveLength(0);
+  });
+
   it('đứng chờ lâu chỉ tính một lần; đi bộ chậm giữa hai pha không tính là dừng', () => {
     const counter = run([
       [10_000, still('right')],

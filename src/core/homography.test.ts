@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   COURT_CORNERS_M,
   applyHomography,
+  NEAR_LINE_Y,
+  cornersFromReference,
   courtMapping,
   invertMatrix3,
+  referenceFromCorners,
   solveHomography,
   validateCorners,
   type Point,
@@ -64,5 +67,31 @@ describe('validateCorners', () => {
   it('báo lỗi khi bấm sai thứ tự (hình chéo nhau) hoặc thiếu điểm', () => {
     expect(validateCorners([good[0]!, good[2]!, good[1]!, good[3]!])).toContain('thứ tự');
     expect(validateCorners(good.slice(0, 3))).toBe('Cần bấm đủ 4 góc sân');
+  });
+});
+
+describe('calibrate khi biên cuối gần nằm ngoài khung hình', () => {
+  const trueCorners = COURT_CORNERS_M.map(project);
+
+  it.each(['doublesLongService', 'shortService'] as const)('bấm hai đầu vạch %s thay cho hai góc gần vẫn ra đúng 4 góc sân', (line) => {
+    const y = NEAR_LINE_Y[line];
+    const clicked = ([[0, y], [6.1, y], [6.1, 13.4], [0, 13.4]] as Point[]).map(project);
+    cornersFromReference(clicked, line).forEach((corner, i) => {
+      expect(corner[0]).toBeCloseTo(trueCorners[i]![0], 3);
+      expect(corner[1]).toBeCloseTo(trueCorners[i]![1], 3);
+    });
+  });
+
+  it('chỉnh lại calibrate cũ: đổi 4 góc sân thành các điểm trên vạch đã chọn rồi đổi ngược lại không sai lệch', () => {
+    const points = referenceFromCorners(trueCorners, 'doublesLongService');
+    expect(points[0]![1]).toBeLessThan(trueCorners[0]![1]);
+    cornersFromReference(points, 'doublesLongService').forEach((corner, i) => {
+      expect(corner[0]).toBeCloseTo(trueCorners[i]![0], 3);
+      expect(corner[1]).toBeCloseTo(trueCorners[i]![1], 3);
+    });
+  });
+
+  it('biên cuối thì giữ nguyên các điểm đã bấm', () => {
+    expect(cornersFromReference(trueCorners, 'baseline')).toEqual(trueCorners);
   });
 });

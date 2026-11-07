@@ -822,3 +822,44 @@ tr.clickable:hover {
 .checklist li.todo .check-icon {
   color: var(--muted);
 }
+
+/* Nhãn phát cầu */
+
+.label-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.label-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.label-chip.near {
+  border-color: var(--blue);
+}
+
+.label-chip.far {
+  border-color: var(--warn);
+}
+
+button.link {
+  padding: 0 2px;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+kbd {
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: inherit;
+}

@@ -1,5 +1,6 @@
 import { MatchEngine } from '../core/scoreEngine';
-import { ServeFormationDetector, type PlayerSample } from '../core/serveFormation';
+import { ServeFormationDetector, type PlayerSample, type PositionFrame } from '../core/serveFormation';
+import { guessServingTeams, type ServeTeamGuess } from '../core/serveTeam';
 import type { MatchState, Score, ServeObservation } from '../core/types';
 import type { CalibrationProfile } from '../data/types';
 import { FrameProcessor } from './frameProcessor';
@@ -19,6 +20,8 @@ export interface AnalysisSummary {
   entries: AnalysisEntry[];
   /** Thời điểm (ms) các lần cả sân dừng lại chuẩn bị phát, mỗi lần là một pha. */
   pauses: number[];
+  /** Đội phát mỗi pha đoán từ chuyển động sau lần dừng (chưa đưa vào engine, để đo với nhãn). */
+  serveGuesses: ServeTeamGuess[];
   state: MatchState;
 }
 
@@ -31,6 +34,7 @@ export class VideoAnalysis {
   private readonly detector = new ServeFormationDetector();
   private readonly engine = new MatchEngine();
   private readonly entries: AnalysisEntry[] = [];
+  private readonly positions: PositionFrame[] = [];
   private frames = 0;
   private fullFrames = 0;
   lastPlayers: PlayerSample[] = [];
@@ -42,6 +46,7 @@ export class VideoAnalysis {
   /** t: thời điểm trong video (ms). */
   processFrame(t: number, people: PersonDetection[]): AnalysisEntry | null {
     const frame = this.processor.process(t, people);
+    this.positions.push(frame);
     this.frames += 1;
     if (frame.players.length === 4) this.fullFrames += 1;
     this.lastPlayers = frame.players;
@@ -64,6 +69,7 @@ export class VideoAnalysis {
       fullFrameRatio: this.frames === 0 ? 0 : this.fullFrames / this.frames,
       entries: [...this.entries],
       pauses: [...this.detector.pauseTimes],
+      serveGuesses: guessServingTeams(this.positions, this.detector.pauseTimes),
       state: this.engine.state,
     };
   }

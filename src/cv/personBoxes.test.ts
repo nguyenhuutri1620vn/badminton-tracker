@@ -8,6 +8,7 @@ describe('khung người', () => {
     const person = personFromBox({ x: 50, y: 100, w: 40, h: 120, score: 0.8 }, inner, 1000, 1000);
     expect(person.foot[0]).toBeCloseTo(0.17);
     expect(person.foot[1]).toBeCloseTo(0.32);
+    expect(person.top).toBeCloseTo(0.2);
     expect(person).toMatchObject({ handRaised: null, confidence: 0.8 });
   });
 

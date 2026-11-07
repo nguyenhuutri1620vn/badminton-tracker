@@ -9,6 +9,8 @@ export interface RallyCounterConfig {
   minStillMs: number;
   /** Tốc độ vượt mức này là đã di chuyển (đánh, đi nhặt cầu): lần dừng sau đó mới là lần chuẩn bị phát mới. */
   movingSpeed: number;
+  /** Quãng dịch chuyển của mỗi người được trừ đi chừng này pixel (theo `metersPerPixel`) coi là nhiễu vị trí. */
+  noisePx: number;
 }
 
 /**
@@ -22,11 +24,15 @@ export const DEFAULT_RALLY_CONFIG: RallyCounterConfig = {
   stillSpeed: 0.3,
   minStillMs: 500,
   movingSpeed: 0.7,
+  // Đo trên video phong trào 720p (DECISIONS D59): trừ 1 pixel thì số lần dừng khớp nhịp 10–13 giây một pha;
+  // từ 2 pixel bắt đầu đếm hai lần dừng cách nhau 2–3 giây.
+  noisePx: 1,
 };
 
 interface Sample {
   t: number;
-  positions: Map<string, [number, number]>;
+  /** x, y (mét) và số mét của 1 pixel tại đó. */
+  positions: Map<string, [number, number, number]>;
 }
 
 /**
@@ -54,7 +60,10 @@ export class RallyCounter {
   }
 
   push(frame: PositionFrame): void {
-    this.samples.push({ t: frame.t, positions: new Map(frame.players.map((p) => [p.id, [p.x, p.y]])) });
+    this.samples.push({
+      t: frame.t,
+      positions: new Map(frame.players.map((p) => [p.id, [p.x, p.y, p.metersPerPixel ?? 0]])),
+    });
     const cutoff = frame.t - this.config.speedWindowMs;
     while (this.samples.length > 1 && this.samples[1]!.t <= cutoff) this.samples.shift();
 
@@ -79,9 +88,11 @@ export class RallyCounter {
     if (!first || !last || last.t - first.t < this.config.speedWindowMs * 0.8) return null;
     const seconds = (last.t - first.t) / 1000;
     const speeds: number[] = [];
-    for (const [id, [x, y]] of last.positions) {
+    for (const [id, [x, y, metersPerPixel]] of last.positions) {
       const start = first.positions.get(id);
-      if (start) speeds.push(Math.hypot(x - start[0], y - start[1]) / seconds);
+      if (!start) continue;
+      const moved = Math.hypot(x - start[0], y - start[1]) - this.config.noisePx * metersPerPixel;
+      speeds.push(Math.max(0, moved) / seconds);
     }
     // Cần thấy ít nhất 3 người: thiếu người thì trung vị không đại diện được cả sân.
     if (speeds.length < 3) return null;

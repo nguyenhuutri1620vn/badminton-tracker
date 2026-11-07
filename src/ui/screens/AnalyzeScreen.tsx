@@ -1,8 +1,17 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { getPersonDetector, TiledPersonDetector } from '../../cv/personDetector';
 import { VideoAnalysis, formatVideoTime, type AnalysisSummary } from '../../cv/videoAnalysis';
+import {
+  addLabel,
+  evaluateServeTeams,
+  parseLabelFile,
+  removeNearestLabel,
+  serializeLabels,
+  type ServeEvaluation,
+  type ServeLabel,
+} from '../../cv/serveLabels';
 import type { PlayerSample } from '../../core/serveFormation';
-import type { Score } from '../../core/types';
+import type { Score, Team } from '../../core/types';
 import { MiniMap } from '../components/MiniMap';
 import { downloadText, useAppState, useModel } from '../context';
 
@@ -17,6 +26,42 @@ async function ensureDuration(video: HTMLVideoElement): Promise<void> {
     video.currentTime = 1e9;
   });
   video.currentTime = 0;
+}
+
+const labelKey = (fileName: string) => `serveLabels:${fileName}`;
+
+/** Nhãn lưu theo tên file video trong trình duyệt, để mở lại video là có nhãn cũ. */
+function loadLabels(fileName: string): ServeLabel[] {
+  try {
+    const text = localStorage.getItem(labelKey(fileName));
+    return text ? parseLabelFile(text).labels : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLabels(fileName: string, labels: ServeLabel[]): void {
+  try {
+    localStorage.setItem(labelKey(fileName), serializeLabels(fileName, labels));
+  } catch {
+    // Không lưu được (chế độ ẩn danh...): vẫn xuất file nhãn được.
+  }
+}
+
+const teamName = (team: Team | null) => (team === 'near' ? 'Gần' : team === 'far' ? 'Xa' : 'chưa rõ');
+
+function EvaluationRow({ name, result }: { name: string; result: ServeEvaluation }) {
+  return (
+    <tr>
+      <td>{name}</td>
+      <td>{Number.isNaN(result.accuracy) ? '–' : `${Math.round(result.accuracy * 100)}%`}</td>
+      <td>{result.correct}</td>
+      <td>{result.wrongTeam}</td>
+      <td>{result.unknownTeam}</td>
+      <td>{result.missed}</td>
+      <td>{result.extra}</td>
+    </tr>
+  );
 }
 
 export function AnalyzeScreen() {
@@ -34,6 +79,31 @@ export function AnalyzeScreen() {
   const [finalScore, setFinalScore] = useState<Score | null>(null);
   const [truth, setTruth] = useState({ near: '', far: '' });
   const [error, setError] = useState<string | null>(null);
+  const [labels, setLabels] = useState<ServeLabel[]>([]);
+
+  const updateLabels = (next: ServeLabel[]) => {
+    setLabels(next);
+    if (fileName) saveLabels(fileName, next);
+  };
+
+  // Gán nhãn bằng phím khi xem lại video: G = đội gần phát, X = đội xa phát, Z = xóa nhãn gần nhất.
+  useEffect(() => {
+    if (!videoUrl || status === 'running') return;
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || e.metaKey || e.ctrlKey || e.altKey) return;
+      const video = videoRef.current;
+      if (!video) return;
+      const t = Math.round(video.currentTime * 1000);
+      const key = e.key.toLowerCase();
+      if (key === 'g' || key === 'x') updateLabels(addLabel(labels, { t, team: key === 'g' ? 'near' : 'far' }));
+      else if (key === 'z') updateLabels(removeNearestLabel(labels, t));
+      else return;
+      e.preventDefault();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [videoUrl, status, labels, fileName]);
 
   useEffect(() => () => void (videoUrl && URL.revokeObjectURL(videoUrl)), [videoUrl]);
 
@@ -41,6 +111,7 @@ export function AnalyzeScreen() {
     if (videoUrl) URL.revokeObjectURL(videoUrl);
     setVideoUrl(URL.createObjectURL(file));
     setFileName(file.name);
+    setLabels(loadLabels(file.name));
     setSummary(null);
     setFinalScore(null);
     setStatus('idle');
@@ -107,6 +178,8 @@ export function AnalyzeScreen() {
       fullFrameRatio: summary.fullFrameRatio,
       truth: truth.near && truth.far ? { near: +truth.near, far: +truth.far } : null,
       finalScore,
+      labels,
+      serveGuesses: summary.serveGuesses,
       pauses: summary.pauses.map((t) => formatVideoTime(t)),
       observations: summary.entries.map((e) => ({
         time: formatVideoTime(e.observation.t),
@@ -120,6 +193,22 @@ export function AnalyzeScreen() {
       })),
     };
     downloadText(`phan-tich-${(fileName ?? 'video').replace(/\.[^.]+$/, '')}.json`, JSON.stringify(data, null, 2), 'application/json');
+  };
+
+  const exportLabels = () =>
+    downloadText(`nhan-${(fileName ?? 'video').replace(/\.[^.]+$/, '')}.json`, serializeLabels(fileName ?? '', labels), 'application/json');
+
+  const importLabels = async (file: File) => {
+    try {
+      updateLabels(parseLabelFile(await file.text()).labels);
+      setError(null);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  const seek = (t: number) => {
+    if (videoRef.current && status !== 'running') videoRef.current.currentTime = t / 1000;
   };
 
   const truthScore = truth.near !== '' && truth.far !== '' ? { near: +truth.near, far: +truth.far } : null;
@@ -164,6 +253,38 @@ export function AnalyzeScreen() {
                 <div class="bar" style={{ width: `${Math.round(progress * 100)}%` }} />
               </div>
             )}
+            <div class="card">
+              <div>
+                <strong>Nhãn phát cầu</strong> · {labels.length} nhãn
+              </div>
+              <div class="muted">
+                Xem lại video, mỗi lần có người phát cầu thì bấm <kbd>G</kbd> (đội gần phát) hoặc <kbd>X</kbd> (đội xa phát);{' '}
+                <kbd>Z</kbd> xóa nhãn gần chỗ đang xem. Nhãn tự lưu theo tên file video.
+              </div>
+              <div class="row">
+                <button onClick={exportLabels} disabled={labels.length === 0}>
+                  Xuất nhãn
+                </button>
+                <label class="file-button">
+                  Mở file nhãn
+                  <input type="file" accept="application/json,.json" onChange={(e) => e.currentTarget.files?.[0] && importLabels(e.currentTarget.files[0])} />
+                </label>
+              </div>
+              {labels.length > 0 && (
+                <div class="label-list">
+                  {labels.map((l) => (
+                    <span key={l.t} class={`label-chip ${l.team}`}>
+                      <button class="link" onClick={() => seek(l.t)}>
+                        {formatVideoTime(l.t)} {teamName(l.team)}
+                      </button>
+                      <button class="link" aria-label="Xóa nhãn" onClick={() => updateLabels(labels.filter((x) => x !== l))}>
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
           <div class="side">
             <MiniMap players={players} />
@@ -194,6 +315,53 @@ export function AnalyzeScreen() {
             )}
           </div>
         </div>
+      )}
+
+      {summary && labels.length > 0 && (
+        <section>
+          <h2>So với nhãn</h2>
+          <table class="history">
+            <thead>
+              <tr>
+                <th>Cách nhận lần phát</th>
+                <th>Đúng đội phát</th>
+                <th>Đúng</th>
+                <th>Sai</th>
+                <th>Chưa rõ đội</th>
+                <th>Bỏ lỡ</th>
+                <th>Thừa</th>
+              </tr>
+            </thead>
+            <tbody>
+              <EvaluationRow name="Đội rời chỗ sau là đội phát" result={evaluateServeTeams(summary.serveGuesses, labels)} />
+              <EvaluationRow
+                name="Đội hình phát cầu"
+                result={evaluateServeTeams(
+                  summary.entries.map((e) => ({ t: e.observation.t, team: e.observation.servingTeam })),
+                  labels,
+                )}
+              />
+            </tbody>
+          </table>
+          <div class="muted">
+            Ghép mỗi nhãn với lần phát app nhận ra cách không quá 3 giây. "Đúng đội phát" chỉ tính những lần app đã đoán đội.
+          </div>
+        </section>
+      )}
+
+      {summary && summary.serveGuesses.length > 0 && (
+        <details>
+          <summary>Đội phát đoán từ chuyển động ({summary.serveGuesses.length} pha)</summary>
+          <div class="label-list">
+            {summary.serveGuesses.map((g) => (
+              <span key={g.t} class={`label-chip ${g.team ?? ''}`}>
+                <button class="link" onClick={() => seek(g.t)}>
+                  {formatVideoTime(g.t)} {teamName(g.team)}
+                </button>
+              </span>
+            ))}
+          </div>
+        </details>
       )}
 
       {summary && summary.entries.length > 0 && (

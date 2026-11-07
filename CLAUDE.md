@@ -59,6 +59,6 @@ Dashboard di chuyển, thống kê qua nhiều buổi, gửi kết quả cho kh�
 - Không thêm thư viện nặng nếu chưa cần cho MVP.
 
 ## Trạng thái hiện tại
-- MVP đã xong 10 bước trong `docs/PLAN.md`; giai đoạn 2 (bước 11–15) để chấm được trên video thật. Đã xong 11 (phát hiện người dạng khung) và 12 (đếm pha). Quyết định và giới hạn: `docs/DECISIONS.md`. Hướng dẫn: `README.md`.
+- MVP đã xong 10 bước trong `docs/PLAN.md`; giai đoạn 2 (bước 11–15) để chấm được trên video thật. Đã xong 11 (phát hiện người dạng khung), 12 (đếm pha) và 13 (ngưỡng đứng yên theo độ sâu, bỏ khung bị lưới cắt). Quyết định và giới hạn: `docs/DECISIONS.md`. Hướng dẫn: `README.md`.
 - Đo trên video YouTube: thấy đủ 4 người 98% khung (video phong trào 720p). Chưa đo được độ chính xác chấm điểm vì chưa có video ván thật của nhóm.
-- Việc tiếp theo: bước 13 (ngưỡng đứng yên theo độ sâu), 14 (báo khi chưa chắc), 15 (host quay ván thật, chạy Phân tích video với tỉ số thật).
+- Việc tiếp theo: bước 14 (báo khi chưa chắc), 15 (host quay ván thật, chạy Phân tích video với tỉ số thật). Trên video match2 chỉ ~1/3 lần dừng nhận ra đội hình: người chơi hay đứng ngang nhau. Hướng mới: đoán đội phát mỗi pha từ chuyển động (D61), đo bằng nhãn host gán trong Phân tích video (D60).

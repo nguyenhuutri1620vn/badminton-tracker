@@ -3,7 +3,16 @@ import { MatchEngine } from '../core/scoreEngine';
 import { ServeFormationDetector } from '../core/serveFormation';
 import { FrameProcessor } from './frameProcessor';
 import { MatchSimulator } from './simulator';
-import { TEST_CALIBRATION, peopleFromPositions } from './testing/people';
+import { TEST_CALIBRATION, peopleFromPositions, personAt } from './testing/people';
+import { courtMapping } from '../core/homography';
+import { COURT } from '../core/court';
+
+const formationPlayers = [
+  { id: 'a', x: 1.5, y: 2 },
+  { id: 'b', x: 4.5, y: 4.5 },
+  { id: 'c', x: 1.5, y: 9 },
+  { id: 'd', x: 4.5, y: 11.5 },
+];
 
 function seededRandom(seed: number) {
   let state = seed;
@@ -23,6 +32,55 @@ describe('FrameProcessor', () => {
     const detections = processor.toCourt(peopleFromPositions(players));
     expect(detections).toHaveLength(2);
     detections.forEach((d, i) => expect(Math.hypot(d.x - players[i]!.x, d.y - players[i]!.y)).toBeLessThan(0.05));
+  });
+
+  it('mỗi người kèm độ phân giải tại chỗ đứng: nửa xa mỗi pixel nhiều mét hơn nửa gần', () => {
+    const processor = new FrameProcessor(TEST_CALIBRATION);
+    let frame = processor.process(0, peopleFromPositions(formationPlayers));
+    frame = processor.process(100, peopleFromPositions(formationPlayers));
+    const near = frame.players.find((p) => p.y < COURT.netY)!;
+    const far = frame.players.find((p) => p.y > COURT.netY)!;
+    expect(near.metersPerPixel).toBeGreaterThan(0);
+    expect(far.metersPerPixel!).toBeGreaterThan(2 * near.metersPerPixel!);
+  });
+
+  describe('người ở nửa xa bị băng lưới cắt ngang', () => {
+    const { imageWidth: W, imageHeight: H } = TEST_CALIBRATION;
+    const mapping = courtMapping(TEST_CALIBRATION.imageCorners);
+    const groundY = (p: { foot: [number, number] }) => mapping.toCourt([p.foot[0] * W, p.foot[1] * H])[1];
+    const full = personAt(2, 10.5);
+    const heightPx = (full.foot[1] - full.top) * H;
+    // Băng lưới trên ảnh: cao hơn chân một phần ba chiều cao người.
+    const cut = personAt(2, 10.5, { cutAtImageY: full.foot[1] * H - heightPx / 3, confidence: 0.95 });
+
+    it('khung bị cắt đặt chân sai hơn 1 m (kiểm tra dữ liệu giả lập)', () => {
+      expect(groundY(cut) - 10.5).toBeGreaterThan(1);
+    });
+
+    it('thấy cả khung đủ lẫn khung bị cắt thì chỉ còn khung đủ', () => {
+      const detections = new FrameProcessor(TEST_CALIBRATION).toCourt([cut, full]);
+      expect(detections).toHaveLength(1);
+      expect(detections[0]!.y).toBeCloseTo(10.5, 1);
+    });
+
+    it('chỉ thấy khung bị cắt thì bỏ, để tracker giữ vị trí cũ', () => {
+      expect(new FrameProcessor(TEST_CALIBRATION).toCourt([cut])).toHaveLength(0);
+    });
+
+    it('người đứng sát tường sau biên cuối (khung thấp) vẫn giữ để vùng nhận người tự loại', () => {
+      const [d] = new FrameProcessor(TEST_CALIBRATION).toCourt([personAt(3, COURT.length + 2, { heightScale: 0.6 })]);
+      expect(d!.y).toBeCloseTo(COURT.length + 2, 1);
+    });
+
+    it('hai người đứng thẳng hàng trước–sau ở nửa xa vẫn là hai người', () => {
+      const detections = new FrameProcessor(TEST_CALIBRATION).toCourt([personAt(2, 9.5), personAt(2, 12.5)]);
+      expect(detections.map((d) => d.y).sort((a, b) => a - b)).toEqual([expect.closeTo(9.5, 1), expect.closeTo(12.5, 1)]);
+    });
+
+    it('người ở nửa gần khom người không bị bỏ', () => {
+      const [d] = new FrameProcessor(TEST_CALIBRATION).toCourt([personAt(2, COURT.netY - 2, { heightScale: 0.7 })]);
+      expect(d!.y).toBeCloseTo(COURT.netY - 2, 1);
+    });
   });
 
   it.each([1, 2, 3])(

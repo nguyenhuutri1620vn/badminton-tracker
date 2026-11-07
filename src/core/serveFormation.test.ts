@@ -43,6 +43,26 @@ describe('ServeFormationDetector', () => {
     });
   });
 
+  describe('ngưỡng đứng yên theo độ sâu', () => {
+    // Nửa xa của camera góc rộng: 1 pixel khoảng 0,1 m, chân rung 2–3 pixel dù người đứng yên.
+    const farNoise = (samples: PlayerSample[], t: number, metersPerPixel: number) =>
+      samples.map((p) => {
+        const far = p.y > 6.7;
+        const step = Math.floor(t / FRAME_MS) % 2 === 0 ? 0.28 : -0.28;
+        return { ...p, y: far ? p.y + step : p.y, ...(far ? { metersPerPixel } : { metersPerPixel: 0.02 }) };
+      });
+
+    it('người ở xa rung vài pixel (0,28 m) vẫn tính là đứng yên khi biết 1 pixel ở đó là 0,1 m', () => {
+      const detector = new ServeFormationDetector();
+      expect(feed(detector, 0, 1500, (t) => farNoise(formation('near', 'right'), t, 0.1))).toHaveLength(1);
+    });
+
+    it('cùng độ rung đó mà 1 pixel chỉ là 0,02 m thì là đang di chuyển', () => {
+      const detector = new ServeFormationDetector();
+      expect(feed(detector, 0, 1500, (t) => farNoise(formation('near', 'right'), t, 0.02))).toHaveLength(0);
+    });
+  });
+
   it('chưa đứng yên đủ 1 giây thì không phát ra quan sát', () => {
     const detector = new ServeFormationDetector();
     expect(feed(detector, 0, 800, () => formation('near', 'right'))).toHaveLength(0);

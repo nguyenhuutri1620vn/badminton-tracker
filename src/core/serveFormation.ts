@@ -10,6 +10,11 @@ export interface PlayerSample {
   y: number;
   /** Tay cầm vợt giơ cao hơn vai (từ pose). Người nhận cầu thường giơ vợt, người phát thì không. */
   handRaised?: boolean;
+  /**
+   * Số mét ứng với 1 pixel ảnh tại chỗ người đứng (theo chiều kém nhất). Ở nửa xa của camera góc rộng là 0,06–0,13 m,
+   * nên vị trí rung vài pixel đã thành vài chục cm dù người đứng yên. Không có thì coi như đo chính xác.
+   */
+  metersPerPixel?: number;
 }
 
 export interface PositionFrame {
@@ -22,6 +27,8 @@ export interface DetectorConfig {
   stillDurationMs: number;
   /** Mỗi người không được lệch quá khoảng này khỏi vị trí trung bình trong cửa sổ đứng yên. */
   stillToleranceM: number;
+  /** Ở xa camera, ngưỡng trên được nới thành chừng này pixel (theo `metersPerPixel`) nếu lớn hơn. */
+  stillTolerancePx: number;
   /** Sau khi phát ra quan sát, cần có người di chuyển quá khoảng này mới nhận đội hình tiếp theo. */
   rearmDistanceM: number;
 }
@@ -29,6 +36,9 @@ export interface DetectorConfig {
 export const DEFAULT_DETECTOR_CONFIG: DetectorConfig = {
   stillDurationMs: 1000,
   stillToleranceM: 0.25,
+  // Đo trên video phong trào 720p (DECISIONS D59): 3 pixel tăng số lần phát nhận ra gần gấp đôi; 4–5 pixel bắt đầu
+  // nhận đội hình giả cách nhau vài giây khi người ở xa còn đang bước vào chỗ.
+  stillTolerancePx: 3,
   rearmDistanceM: 1.0,
 };
 
@@ -102,11 +112,11 @@ export class ServeFormationDetector {
 
   /** Vị trí trung bình của mỗi người nếu cả 4 người đều đứng yên trong cửa sổ, ngược lại null. */
   private stationaryMeans(): Map<string, Mean> | null {
-    const tracks = new Map<string, Mean[]>();
+    const tracks = new Map<string, PlayerSample[]>();
     for (const frame of this.window) {
       for (const p of frame.players) {
         const list = tracks.get(p.id) ?? [];
-        list.push({ x: p.x, y: p.y });
+        list.push(p);
         tracks.set(p.id, list);
       }
     }
@@ -119,7 +129,9 @@ export class ServeFormationDetector {
         x: points.reduce((s, p) => s + p.x, 0) / points.length,
         y: points.reduce((s, p) => s + p.y, 0) / points.length,
       };
-      const still = points.every((p) => Math.hypot(p.x - mean.x, p.y - mean.y) <= this.config.stillToleranceM);
+      const metersPerPixel = points[points.length - 1]!.metersPerPixel ?? 0;
+      const tolerance = Math.max(this.config.stillToleranceM, this.config.stillTolerancePx * metersPerPixel);
+      const still = points.every((p) => Math.hypot(p.x - mean.x, p.y - mean.y) <= tolerance);
       if (!still) return null;
       means.set(id, mean);
     }
